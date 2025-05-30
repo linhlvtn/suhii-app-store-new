@@ -1,20 +1,29 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { onAuthStateChanged } from 'firebase/auth';
+import { useEffect, useState } from 'react';
+import { auth } from './firebaseConfig'; // Import `auth`
+
+import AuthStack from './src/navigation/AuthStack'; // Import AuthStack
+import AppStack from './src/navigation/AppStack'; // Đảm bảo dòng này không bị ghi chú và được viết đúng
 
 export default function App() {
+  const [user, setUser] = useState(null); // Lưu trữ thông tin người dùng đã đăng nhập
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser); // Cập nhật state `user` khi có người dùng đăng nhập/đăng xuất
+    });
+
+    return unsubscribe;
+  }, []); // Chạy một lần khi component mount
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <NavigationContainer>
+      {user ? (
+        <AppStack />
+      ) : (
+        <AuthStack />
+      )}
+    </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
