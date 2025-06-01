@@ -12,23 +12,42 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker'; // Để chọn dịch vụ
-import * as ImagePicker from 'expo-image-picker'; // Để chọn/chụp ảnh
-import { db, auth } from '../../firebaseConfig'; // Import db và auth
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; // Firebase Firestore
-import { getAuth } from 'firebase/auth'; // Để lấy thông tin người dùng hiện tại
-import axios from 'axios'; // Để tải ảnh lên Cloudinary
+import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
+import { db, auth } from '../../firebaseConfig';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import axios from 'axios';
 
-const CLOUDINARY_CLOUD_NAME = 'dq802xggt'; // THAY THẾ BẰNG CLOUD NAME CỦA BẠN
+const CLOUDINARY_CLOUD_NAME = 'dq802xggt'; // CLOUD NAME CỦA BẠN
 const CLOUDINARY_UPLOAD_PRESET = 'suhii_app_preset'; // Tên preset bạn đã tạo
 
 const CreateReportScreen = ({ navigation }) => {
-  const [price, setPrice] = useState('');
-  const [service, setService] = useState('Nail'); // Mặc định là Nail
+  const [price, setPrice] = useState(''); // Giá tiền định dạng chuỗi
+  const [rawPrice, setRawPrice] = useState(''); // Giá tiền gốc (số) để lưu vào DB
+  const [service, setService] = useState('Nail');
   const [note, setNote] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Tiền mặt'); // Mặc định là Tiền mặt
-  const [imageUri, setImageUri] = useState(null); // URI của ảnh đã chọn
+  const [paymentMethod, setPaymentMethod] = useState('Tiền mặt');
+  const [imageUri, setImageUri] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Hàm định dạng số tiền thành chuỗi có dấu chấm
+  const formatCurrency = (num) => {
+    if (!num) return '';
+    // Loại bỏ tất cả ký tự không phải số
+    let cleanNum = num.toString().replace(/[^0-9]/g, '');
+    // Định dạng thành chuỗi có dấu chấm
+    return cleanNum.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  };
+
+  // Hàm xử lý thay đổi text input cho giá tiền
+  const handlePriceChange = (text) => {
+    // Lưu giá trị gốc (chỉ số)
+    const numericValue = text.replace(/[^0-9]/g, '');
+    setRawPrice(numericValue);
+
+    // Lưu giá trị đã định dạng để hiển thị
+    setPrice(formatCurrency(numericValue));
+  };
 
   // Hàm chọn ảnh từ thư viện hoặc chụp ảnh
   const pickImage = async () => {
@@ -36,7 +55,7 @@ const CreateReportScreen = ({ navigation }) => {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.7, // Giảm chất lượng để tải lên nhanh hơn
+      quality: 0.7,
     });
 
     if (!result.canceled) {
@@ -59,46 +78,65 @@ const CreateReportScreen = ({ navigation }) => {
   };
 
   // Hàm tải ảnh lên Cloudinary
-  const uploadImageToCloudinary = async (uri) => {
-    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-        Alert.alert('Lỗi cấu hình Cloudinary', 'Vui lòng điền CLOUDINARY_CLOUD_NAME và CLOUDINARY_UPLOAD_PRESET trong CreateReportScreen.js');
-        return null;
-    }
+// Hàm tải ảnh lên Cloudinary
+const uploadImageToCloudinary = async (uri) => {
+  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+      Alert.alert('Lỗi cấu hình Cloudinary', 'Vui lòng điền CLOUDINARY_CLOUD_NAME và CLOUDINARY_UPLOAD_PRESET trong CreateReportScreen.js');
+      return null;
+  }
 
-    const formData = new FormData();
-    formData.append('file', {
-      uri: uri,
-      type: 'image/jpeg', // Hoặc image/png tùy loại ảnh
-      name: 'report_image.jpg',
-    });
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const formData = new FormData();
 
+  // Kiểm tra nếu URI là một data URI (thường gặp trên web)
+  if (uri.startsWith('data:')) {
+    // Chuyển đổi data URI thành Blob
     try {
-      const response = await axios.post(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
-      return response.data.secure_url; // Trả về URL của ảnh đã tải lên
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      formData.append('file', blob, 'report_image.jpg'); // Append Blob trực tiếp với tên file
     } catch (error) {
-      console.error('Lỗi tải ảnh lên Cloudinary:', error.response ? error.response.data : error.message);
-      Alert.alert('Lỗi tải ảnh', 'Không thể tải ảnh lên Cloudinary. Vui lòng thử lại.');
+      console.error('Lỗi chuyển đổi data URI sang Blob:', error);
+      Alert.alert('Lỗi ảnh', 'Không thể xử lý ảnh cho phiên bản web. Vui lòng thử lại.');
       return null;
     }
-  };
+  } else {
+    // Đối với các URI thông thường (thường là mobile, hoặc URL từ xa)
+    formData.append('file', {
+      uri: uri,
+      type: 'image/jpeg', // Có thể cần thay đổi type nếu ảnh là PNG/khác
+      name: 'report_image.jpg',
+    });
+  }
+
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+  try {
+    const response = await axios.post(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    return response.data.secure_url; // Trả về URL của ảnh đã tải lên
+  } catch (error) {
+    console.error('Lỗi tải ảnh lên Cloudinary:', error.response ? error.response.data : error.message);
+    Alert.alert('Lỗi tải ảnh', 'Không thể tải ảnh lên Cloudinary. Vui lòng thử lại.');
+    return null;
+  }
+};
 
   // Hàm xử lý khi gửi báo cáo
   const handleSubmitReport = async () => {
-    if (!price || !service || !paymentMethod || !imageUri) {
+    // Sử dụng rawPrice (số) để kiểm tra và lưu
+    const numericPrice = parseFloat(rawPrice);
+    if (!rawPrice || !service || !paymentMethod || !imageUri) {
       Alert.alert('Lỗi', 'Vui lòng điền đầy đủ giá tiền, chọn dịch vụ, hình thức thanh toán và chụp ảnh.');
       return;
     }
 
-    const numericPrice = parseFloat(price);
     if (isNaN(numericPrice) || numericPrice <= 0) {
       Alert.alert('Lỗi', 'Giá tiền không hợp lệ. Vui lòng nhập số dương.');
       return;
@@ -106,40 +144,39 @@ const CreateReportScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      const currentUser = getAuth(auth).currentUser; // Lấy thông tin người dùng hiện tại
+      const currentUser = auth.currentUser;
       if (!currentUser) {
         Alert.alert('Lỗi', 'Bạn cần đăng nhập để tạo báo cáo.');
         return;
       }
 
-      // Tải ảnh lên Cloudinary trước
       const imageUrl = await uploadImageToCloudinary(imageUri);
       if (!imageUrl) {
         setLoading(false);
-        return; // Dừng lại nếu tải ảnh thất bại
+        return;
       }
 
-      // Tạo báo cáo trong Firestore
       await addDoc(collection(db, 'reports'), {
         userId: currentUser.uid,
-        userEmail: currentUser.email, // Sử dụng email giả để nhận diện nhân viên
-        userName: currentUser.email.split('@')[0], // Lấy số điện thoại làm tên nhân viên
-        price: numericPrice,
+        userEmail: currentUser.email,
+        userName: currentUser.email.split('@')[0],
+        price: numericPrice, // LƯU GIÁ TRỊ SỐ VÀO FIRESTORE
         service: service,
         note: note,
         paymentMethod: paymentMethod,
-        imageUrl: imageUrl, // URL của ảnh đã tải lên
-        createdAt: serverTimestamp(), // Thời gian tạo báo cáo (tự động của Firestore)
+        imageUrl: imageUrl,
+        createdAt: serverTimestamp(),
       });
 
       Alert.alert('Thành công', 'Báo cáo đã được tạo thành công!');
       // Reset form
       setPrice('');
+      setRawPrice(''); // Reset rawPrice
       setService('Nail');
       setNote('');
       setPaymentMethod('Tiền mặt');
       setImageUri(null);
-      navigation.goBack(); // Quay lại màn hình trước đó (StoreScreen)
+      navigation.goBack();
     } catch (error) {
       console.error('Lỗi khi gửi báo cáo:', error);
       Alert.alert('Lỗi', 'Có lỗi xảy ra khi tạo báo cáo. Vui lòng thử lại.');
@@ -156,8 +193,8 @@ const CreateReportScreen = ({ navigation }) => {
         style={styles.input}
         placeholder="Giá tiền (VNĐ)"
         keyboardType="numeric"
-        value={price}
-        onChangeText={setPrice}
+        value={price} // HIỂN THỊ GIÁ TRỊ ĐÃ ĐỊNH DẠNG
+        onChangeText={handlePriceChange} // SỬ DỤNG HÀM MỚI
       />
 
       <View style={styles.pickerContainer}>
@@ -230,7 +267,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    paddingBottom: 50, // Để có khoảng trống đủ khi cuộn
+    paddingBottom: 50,
   },
   title: {
     fontSize: 24,
@@ -251,7 +288,7 @@ const styles = StyleSheet.create({
   },
   noteInput: {
     height: 100,
-    textAlignVertical: 'top', // Để text bắt đầu từ trên cùng
+    textAlignVertical: 'top',
   },
   pickerContainer: {
     borderWidth: 1,
@@ -292,13 +329,13 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 8,
     marginBottom: 20,
-    resizeMode: 'contain', // Để ảnh không bị cắt xén
+    resizeMode: 'contain',
     backgroundColor: '#e9e9e9',
   },
   submitButton: {
     width: '100%',
     padding: 18,
-    backgroundColor: '#28a745', // Màu xanh lá cây
+    backgroundColor: '#28a745',
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 20,
