@@ -11,28 +11,24 @@ import {
   Image,
   ScrollView,
   ActivityIndicator,
-  Platform, // Để xử lý style theo nền tảng
+  Platform,
 } from 'react-native';
-// Đảm bảo @react-native-picker/picker đã được cài đặt: npx expo install @react-native-picker/picker
 import { Picker } from '@react-native-picker/picker';
-// Đảm bảo expo-image-picker đã được cài đặt: npx expo install expo-image-picker
 import * as ImagePicker from 'expo-image-picker';
-// Đảm bảo axios đã được cài đặt: npm install axios
 import axios from 'axios';
 
 import { db, auth } from '../../firebaseConfig';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
-// Đảm bảo react-native-safe-area-context đã cài đặt: npx expo install react-native-safe-area-context
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar'; // Để quản lý thanh trạng thái
-import { Ionicons } from '@expo/vector-icons'; // Để dùng icon quay lại
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 
-const CLOUDINARY_CLOUD_NAME = 'dq802xggt'; // THAY THẾ BẰNG CLOUD NAME CỦA BẠN
-const CLOUDINARY_UPLOAD_PRESET = 'suhii_app_preset'; // Tên preset bạn đã tạo
+const CLOUDINARY_CLOUD_NAME = 'dq802xggt';
+const CLOUDINARY_UPLOAD_PRESET = 'suhii_app_preset';
 
 const CreateReportScreen = ({ navigation }) => {
-  const insets = useSafeAreaInsets(); // Dùng để xử lý vùng an toàn trên iOS
+  const insets = useSafeAreaInsets();
   const [price, setPrice] = useState('');
   const [rawPrice, setRawPrice] = useState('');
   const [service, setService] = useState('Nail');
@@ -93,7 +89,7 @@ const CreateReportScreen = ({ navigation }) => {
 
     const formData = new FormData();
 
-    if (uri.startsWith('data:') && Platform.OS === 'web') { // Xử lý đặc biệt cho web
+    if (uri.startsWith('data:') && Platform.OS === 'web') {
       try {
         const response = await fetch(uri);
         const blob = await response.blob();
@@ -187,13 +183,13 @@ const CreateReportScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.fullScreenContainer, { paddingTop: insets.top }]}>
-      <StatusBar style="dark" /> {/* Để thanh trạng thái có màu tối */}
+      <StatusBar style="dark" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={28} color="#007bff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tạo Báo cáo Mới</Text>
-        <View style={{width: 28}} /> {/* Giữ chỗ để căn giữa tiêu đề */}
+        <View style={{width: 28}} />
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
@@ -296,7 +292,7 @@ const CreateReportScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   fullScreenContainer: {
     flex: 1,
-    backgroundColor: '#f0f2f5', // Nền tổng thể nhẹ nhàng
+    backgroundColor: '#f0f2f5',
   },
   header: {
     flexDirection: 'row',
@@ -349,7 +345,7 @@ const styles = StyleSheet.create({
   },
   input: {
     width: '100%',
-    padding: Platform.OS === 'ios' ? 12 : 10, // Tăng padding cho iOS
+    padding: Platform.OS === 'ios' ? 12 : 10,
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 8,
@@ -369,8 +365,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 15,
     backgroundColor: '#fcfcfc',
-    overflow: 'hidden', // Đảm bảo picker không tràn ra ngoài border
-    // Để cố định chiều cao của Picker trên iOS
+    overflow: 'hidden',
     ...Platform.select({
         ios: {
             height: 50,
@@ -380,7 +375,6 @@ const styles = StyleSheet.create({
   },
   picker: {
     width: '100%',
-    // Đảm bảo Picker trên Android không có viền thừa
     ...Platform.select({
         android: {
             color: '#333',
@@ -388,7 +382,7 @@ const styles = StyleSheet.create({
     })
   },
   pickerItem: {
-    fontSize: 16, // Cỡ chữ cho Picker item
+    fontSize: 16,
     color: '#333',
   },
   imageSection: {
@@ -410,17 +404,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   imageButton: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e7f0fa', // Màu nền nhẹ
+    justifyContent: 'center',
+    backgroundColor: '#e7f0fa',
     paddingVertical: 12,
     paddingHorizontal: 15,
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#cce0f0',
     width: '100%',
-    justifyContent: 'center',
-    marginBottom: 5,
+    marginBottom: 10,
   },
   imageButtonText: {
     color: '#007bff',
@@ -440,7 +434,7 @@ const styles = StyleSheet.create({
   pickedImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover', // Đảm bảo ảnh hiển thị đầy đủ
+    resizeMode: 'cover',
   },
   removeImageButton: {
     position: 'absolute',
