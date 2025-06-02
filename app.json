@@ -23,7 +23,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "jsEngine": "jsc"
+      "jsEngine": "jsc",
+      "package": "com.anonymous.suhiiappstorenew"
     },
     "web": {
       "favicon": "./assets/favicon.png"

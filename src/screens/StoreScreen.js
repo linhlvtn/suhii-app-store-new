@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
-  RefreshControl, // Để kéo xuống làm mới
+  RefreshControl, 
+  Image // Để kéo xuống làm mới
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native'; // useFocusEffect để refresh khi quay lại
 import { db, auth } from '../../firebaseConfig'; // Import db và auth
