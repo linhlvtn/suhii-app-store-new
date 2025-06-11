@@ -1,5 +1,3 @@
-// src/screens/CreateReportScreen.js
-
 import React, { useState } from 'react';
 import {
   View,
@@ -10,33 +8,67 @@ import {
   Alert,
   Image,
   ScrollView,
+  Modal,
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
-
 import { db, auth } from '../../firebaseConfig';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 
+// --- COMPONENT RADIOBUTTON ---
+const RadioButton = ({ options, selectedOption, onSelect }) => {
+  return (
+    <View>
+      {options.map((option) => (
+        <TouchableOpacity
+          key={option.value}
+          style={styles.radioButtonContainer}
+          onPress={() => onSelect(option.value)}
+        >
+          <View style={[styles.radioCircle, { borderColor: selectedOption === option.value ? '#007bff' : '#e0e0e0' }]}>
+            {selectedOption === option.value && <View style={styles.selectedRb} />}
+          </View>
+          <Text style={styles.radioButtonText}>{option.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+// --- CÁC HẰNG SỐ VÀ LỰA CHỌN ---
 const CLOUDINARY_CLOUD_NAME = 'dq802xggt';
 const CLOUDINARY_UPLOAD_PRESET = 'suhii_app_preset';
 
+const SERVICE_OPTIONS = [
+  { label: 'Nail', value: 'Nail' },
+  { label: 'Mi', value: 'Mi' },
+  { label: 'Gội đầu', value: 'Gội đầu' },
+  { label: 'Khác', value: 'Khác' },
+];
+
+const PAYMENT_OPTIONS = [
+  { label: 'Tiền mặt', value: 'Tiền mặt' },
+  { label: 'Chuyển khoản', value: 'Chuyển khoản' },
+];
+
 const CreateReportScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+
+  // --- STATE MANAGEMENT ---
   const [price, setPrice] = useState('');
   const [rawPrice, setRawPrice] = useState('');
-  const [service, setService] = useState('Nail');
+  const [serviceType, setServiceType] = useState(SERVICE_OPTIONS[0].value); // Sử dụng state mới
   const [note, setNote] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Tiền mặt');
+  const [paymentMethod, setPaymentMethod] = useState(PAYMENT_OPTIONS[0].value); // Sử dụng state mới
   const [imageUri, setImageUri] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // State cho Modal Loading
 
+  // --- CÁC HÀM XỬ LÝ (GIỮ NGUYÊN LOGIC GỐC) ---
   const formatCurrency = (num) => {
     if (!num) return '';
     let cleanNum = num.toString().replace(/[^0-9]/g, '');
@@ -49,6 +81,9 @@ const CreateReportScreen = ({ navigation }) => {
     setPrice(formatCurrency(numericValue));
   };
 
+  // =================================================================
+  // LOGIC XỬ LÝ HÌNH ẢNH (GIỮ NGUYÊN 100% TỪ CODE GỐC CỦA BẠN)
+  // =================================================================
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -56,7 +91,6 @@ const CreateReportScreen = ({ navigation }) => {
       aspect: [4, 3],
       quality: 0.7,
     });
-
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
     }
@@ -68,27 +102,24 @@ const CreateReportScreen = ({ navigation }) => {
       Alert.alert('Quyền truy cập Camera bị từ chối', 'Vui lòng cho phép ứng dụng truy cập camera để chụp ảnh.');
       return;
     }
-
     let result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.7,
     });
-
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
     }
   };
 
   const uploadImageToCloudinary = async (uri) => {
+    // ... (Toàn bộ hàm này được giữ nguyên y hệt code gốc của bạn)
     if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
         Alert.alert('Lỗi cấu hình Cloudinary', 'Vui lòng điền CLOUDINARY_CLOUD_NAME và CLOUDINARY_UPLOAD_PRESET trong CreateReportScreen.js');
         return null;
     }
-
     const formData = new FormData();
-
     if (uri.startsWith('data:') && Platform.OS === 'web') {
       try {
         const response = await fetch(uri);
@@ -106,9 +137,7 @@ const CreateReportScreen = ({ navigation }) => {
         name: 'report_image.jpg',
       });
     }
-
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
     try {
       const response = await axios.post(
         `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
@@ -127,38 +156,47 @@ const CreateReportScreen = ({ navigation }) => {
     }
   };
 
+  // --- HÀM TỐI ƯU HÓA LỰA CHỌN NGUỒN ẢNH ---
+  const handleImagePick = () => {
+    Alert.alert("Thêm hình ảnh", "Chọn nguồn ảnh của bạn", [
+      { text: "Thư viện", onPress: pickImage },
+      { text: "Camera", onPress: takePhoto },
+      { text: "Hủy", style: "cancel" }
+    ]);
+  }
+
   const handleSubmitReport = async () => {
     const numericPrice = parseFloat(rawPrice);
-    if (!rawPrice || !service || !paymentMethod || !imageUri) {
-      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ giá tiền, chọn dịch vụ, hình thức thanh toán và chụp ảnh.');
+    if (!rawPrice || !serviceType || !paymentMethod || !imageUri) {
+      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ giá tiền, chọn dịch vụ, hình thức thanh toán và hình ảnh.');
       return;
     }
-
     if (isNaN(numericPrice) || numericPrice <= 0) {
       Alert.alert('Lỗi', 'Giá tiền không hợp lệ. Vui lòng nhập số dương.');
       return;
     }
-
     setLoading(true);
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) {
         Alert.alert('Lỗi', 'Bạn cần đăng nhập để tạo báo cáo.');
+        setLoading(false); // Nhớ tắt loading nếu có lỗi
         return;
       }
-
       const imageUrl = await uploadImageToCloudinary(imageUri);
       if (!imageUrl) {
         setLoading(false);
         return;
       }
 
+      // --- CẬP NHẬT LOGIC LƯU DỮ LIỆU ---
       await addDoc(collection(db, 'reports'), {
         userId: currentUser.uid,
         userEmail: currentUser.email,
-        userName: currentUser.email.split('@')[0],
+        // THAY THẾ userName BẰNG employeeName
+        employeeName: currentUser.displayName || currentUser.email.split('@')[0], // Lấy displayName, nếu không có thì fallback về email
         price: numericPrice,
-        service: service,
+        service: serviceType,
         note: note,
         paymentMethod: paymentMethod,
         imageUrl: imageUrl,
@@ -166,11 +204,12 @@ const CreateReportScreen = ({ navigation }) => {
       });
 
       Alert.alert('Thành công', 'Báo cáo đã được tạo thành công!');
+      // ... (Phần reset state giữ nguyên)
       setPrice('');
       setRawPrice('');
-      setService('Nail');
+      setServiceType(SERVICE_OPTIONS[0].value);
       setNote('');
-      setPaymentMethod('Tiền mặt');
+      setPaymentMethod(PAYMENT_OPTIONS[0].value);
       setImageUri(null);
       navigation.goBack();
     } catch (error) {
@@ -184,17 +223,21 @@ const CreateReportScreen = ({ navigation }) => {
   return (
     <View style={[styles.fullScreenContainer, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={28} color="#007bff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Tạo Báo cáo Mới</Text>
-        <View style={{width: 28}} />
-      </View>
+
+      {/* --- MODAL LOADING TOÀN MÀN HÌNH --- */}
+      <Modal transparent={true} animationType="fade" visible={loading}>
+        <View style={styles.modalBackground}>
+            <ActivityIndicator size="large" color="#ffffff" />
+            <Text style={styles.loadingText}>Đang xử lý...</Text>
+        </View>
+      </Modal>
+
+      {/* HEADER TÙY CHỈNH ĐÃ ĐƯỢC XÓA BỎ */}
+      {/* Hãy dùng header của React Navigation trong AppStack.js */}
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        <Text style={styles.sectionTitle}>Thông tin giao dịch</Text>
-        <View style={styles.formSection}>
+        {/* --- Thẻ Giá tiền --- */}
+        <View style={styles.card}>
           <Text style={styles.label}>Giá tiền (VNĐ)</Text>
           <TextInput
             style={styles.input}
@@ -204,152 +247,113 @@ const CreateReportScreen = ({ navigation }) => {
             value={price}
             onChangeText={handlePriceChange}
           />
-
-          <Text style={styles.label}>Dịch vụ</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={service}
-              onValueChange={(itemValue) => setService(itemValue)}
-              style={styles.picker}
-              itemStyle={styles.pickerItem}
-            >
-              <Picker.Item label="Nail" value="Nail" />
-              <Picker.Item label="Mi" value="Mi" />
-              <Picker.Item label="Gội đầu" value="Gội đầu" />
-              <Picker.Item label="Khác" value="Khác" />
-            </Picker>
-          </View>
-
-          <Text style={styles.label}>Ghi chú (tùy chọn)</Text>
-          <TextInput
-            style={[styles.input, styles.noteInput]}
-            placeholder="Ghi chú về dịch vụ hoặc khách hàng..."
-            placeholderTextColor="#999"
-            multiline
-            numberOfLines={4}
-            value={note}
-            onChangeText={setNote}
-          />
-
-          <Text style={styles.label}>Hình thức thanh toán</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={paymentMethod}
-              onValueChange={(itemValue) => setPaymentMethod(itemValue)}
-              style={styles.picker}
-              itemStyle={styles.pickerItem}
-            >
-              <Picker.Item label="Tiền mặt" value="Tiền mặt" />
-              <Picker.Item label="Chuyển khoản" value="Chuyển khoản" />
-            </Picker>
-          </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Hình ảnh kết quả</Text>
-        <View style={styles.imageSection}>
-          <View style={styles.imagePickerButtons}>
-            <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-              <Ionicons name="image-outline" size={24} color="#007bff" />
-              <Text style={styles.imageButtonText}>Chọn từ thư viện</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.imageButton} onPress={takePhoto}>
-              <Ionicons name="camera-outline" size={24} color="#007bff" />
-              <Text style={styles.imageButtonText}>Chụp ảnh</Text>
-            </TouchableOpacity>
-          </View>
-
-          {imageUri ? (
-            <View style={styles.pickedImageContainer}>
-              <Image source={{ uri: imageUri }} style={styles.pickedImage} />
-              <TouchableOpacity style={styles.removeImageButton} onPress={() => setImageUri(null)}>
-                <Ionicons name="close-circle" size={24} color="red" />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Ionicons name="image-sharp" size={60} color="#ccc" />
-              <Text style={styles.imagePlaceholderText}>Chưa có ảnh được chọn</Text>
-            </View>
-          )}
+        {/* --- Thẻ Dịch vụ (Sử dụng RadioButton) --- */}
+        <View style={styles.card}>
+            <Text style={styles.label}>Dịch vụ</Text>
+            <RadioButton
+                options={SERVICE_OPTIONS}
+                selectedOption={serviceType}
+                onSelect={setServiceType}
+            />
         </View>
 
+        {/* --- Thẻ Ghi chú --- */}
+        <View style={styles.card}>
+            <Text style={styles.label}>Ghi chú (tùy chọn)</Text>
+            <TextInput
+              style={[styles.input, styles.noteInput]}
+              placeholder="Ghi chú về dịch vụ hoặc khách hàng..."
+              placeholderTextColor="#999"
+              multiline
+              value={note}
+              onChangeText={setNote}
+            />
+        </View>
+
+        {/* --- Thẻ Thanh toán (Sử dụng RadioButton) --- */}
+        <View style={styles.card}>
+            <Text style={styles.label}>Hình thức thanh toán</Text>
+            <RadioButton
+                options={PAYMENT_OPTIONS}
+                selectedOption={paymentMethod}
+                onSelect={setPaymentMethod}
+            />
+        </View>
+
+        {/* --- Thẻ Hình ảnh --- */}
+        <View style={styles.card}>
+            <Text style={styles.label}>Hình ảnh kết quả</Text>
+            {imageUri ? (
+                <View style={styles.pickedImageContainer}>
+                  <Image source={{ uri: imageUri }} style={styles.pickedImage} />
+                  <TouchableOpacity style={styles.removeImageButton} onPress={() => setImageUri(null)}>
+                    <Ionicons name="close-circle" size={32} color="#D32F2F" />
+                  </TouchableOpacity>
+                </View>
+            ) : (
+                <TouchableOpacity style={styles.imagePicker} onPress={handleImagePick}>
+                    <Ionicons name="camera-outline" size={32} color="#007bff" />
+                    <Text style={styles.imagePickerText}>Thêm hình ảnh</Text>
+                </TouchableOpacity>
+            )}
+        </View>
+      </ScrollView>
+
+      {/* --- NÚT SUBMIT CỐ ĐỊNH Ở FOOTER --- */}
+      <View style={styles.footer}>
         <TouchableOpacity
-          style={styles.submitButton}
+          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
           onPress={handleSubmitReport}
           disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.submitButtonText}>Tạo Báo cáo</Text>
-          )}
+          <Text style={styles.submitButtonText}>Tạo Báo cáo</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
     </View>
   );
 };
 
+// =================================================================
+// STYLESHEET (Đã được làm mới hoàn toàn)
+// =================================================================
 const styles = StyleSheet.create({
   fullScreenContainer: {
     flex: 1,
     backgroundColor: '#f0f2f5',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  backButton: {
-    padding: 5,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
   scrollView: {
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
-    paddingBottom: 50,
+    padding: 15,
+    paddingBottom: 100, // Khoảng trống cho footer
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
-    marginTop: 10,
-  },
-  formSection: {
+  card: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 15,
-    marginBottom: 20,
+    padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   label: {
-    fontSize: 15,
-    color: '#555',
-    marginBottom: 8,
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 10,
     fontWeight: '600',
   },
   input: {
     width: '100%',
-    padding: Platform.OS === 'ios' ? 12 : 10,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 12,
+    paddingHorizontal: 15,
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 8,
-    marginBottom: 15,
     backgroundColor: '#fcfcfc',
     fontSize: 16,
     color: '#333',
@@ -357,127 +361,98 @@ const styles = StyleSheet.create({
   noteInput: {
     height: 100,
     textAlignVertical: 'top',
-    paddingTop: 12,
+    paddingTop: 14,
   },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    marginBottom: 15,
-    backgroundColor: '#fcfcfc',
-    overflow: 'hidden',
-    ...Platform.select({
-        ios: {
-            height: 50,
-            justifyContent: 'center',
-        }
-    })
+  radioButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
   },
-  picker: {
-    width: '100%',
-    ...Platform.select({
-        android: {
-            color: '#333',
-        }
-    })
+  radioCircle: {
+    height: 22,
+    width: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  pickerItem: {
+  selectedRb: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#007bff',
+  },
+  radioButtonText: {
     fontSize: 16,
     color: '#333',
   },
-  imageSection: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-    alignItems: 'center',
-  },
-  imagePickerButtons: {
-    flexDirection: 'column',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginBottom: 20,
-  },
-  imageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  imagePicker: {
+    height: 150,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#007bff',
+    borderStyle: 'dashed',
     justifyContent: 'center',
-    backgroundColor: '#e7f0fa',
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: '#cce0f0',
-    width: '100%',
-    marginBottom: 10,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 123, 255, 0.05)'
   },
-  imageButtonText: {
+  imagePickerText: {
+    marginTop: 10,
     color: '#007bff',
     fontSize: 15,
     fontWeight: 'bold',
-    marginLeft: 8,
   },
   pickedImageContainer: {
     position: 'relative',
-    width: '100%',
-    height: 200,
     borderRadius: 10,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
   },
   pickedImage: {
     width: '100%',
-    height: '100%',
+    height: 220,
     resizeMode: 'cover',
   },
   removeImageButton: {
     position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderRadius: 15,
-    padding: 2,
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
   },
-  imagePlaceholder: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
+  footer: {
+    padding: 15,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 15, // An toàn hơn cho iPhone
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
     borderColor: '#e0e0e0',
-    borderStyle: 'dashed',
-  },
-  imagePlaceholderText: {
-    color: '#999',
-    marginTop: 10,
-    fontSize: 15,
   },
   submitButton: {
     width: '100%',
-    padding: 18,
+    padding: 16,
     backgroundColor: '#28a745',
     borderRadius: 10,
     alignItems: 'center',
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#a5d6a7',
   },
   submitButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
   },
+  modalBackground: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  loadingText: {
+    color: '#ffffff',
+    marginTop: 15,
+    fontSize: 16,
+  }
 });
 
 export default CreateReportScreen;

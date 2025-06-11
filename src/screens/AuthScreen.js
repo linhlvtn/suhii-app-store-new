@@ -3,6 +3,7 @@
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
+    updateProfile, // <-- 1. IMPORT THÊM updateProfile
 } from 'firebase/auth';
 import { useState } from 'react';
 import {
@@ -13,182 +14,209 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    ScrollView, // Thêm ScrollView để tránh lỗi tràn màn hình
 } from 'react-native';
-import { auth } from '../../firebaseConfig'; // Import `auth` từ file cấu hình Firebase của bạn
+import { auth } from '../../firebaseConfig';
 
 const AuthScreen = () => {
-  // eslint-disable-next-line no-unused-vars
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(true); // true = Đăng ký, false = Đăng nhập
-  const [loading, setLoading] = useState(false); // Trạng thái loading khi xử lý
-  const [phoneNumber, setPhoneNumber] = useState(''); // Thêm state cho số điện thoại
+    const [password, setPassword] = useState('');
+    const [isSignUp, setIsSignUp] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [employeeName, setEmployeeName] = useState(''); // <-- 2. THÊM STATE CHO TÊN NHÂN VIÊN
 
-  // Hàm xử lý đăng ký tài khoản
-  const handleSignUp = async () => {
-    // Firebase yêu cầu định dạng email để đăng ký.
-    // Chúng ta sẽ dùng số điện thoại làm "tên đăng nhập" và ghép với một domain giả.
-    // Ví dụ: 0987654321@suhii.app
-    if (!phoneNumber || !password) {
-      Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại và mật khẩu.');
-      return;
+    // Hàm xử lý đăng ký tài khoản (đã cập nhật)
+    const handleSignUp = async () => {
+        // --- 3. KIỂM TRA TÊN NHÂN VIÊN KHI ĐĂNG KÝ ---
+        if (!employeeName.trim()) {
+            Alert.alert('Lỗi', 'Vui lòng nhập tên nhân viên.');
+            return;
+        }
+
+        if (!phoneNumber || !password) {
+            Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại và mật khẩu.');
+            return;
+        }
+
+        if (password.length < 6) {
+            Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự.');
+            return;
+        }
+
+        const emailForFirebase = `${phoneNumber}@suhii.app`;
+        setLoading(true);
+        try {
+            // Tạo tài khoản mới
+            const userCredential = await createUserWithEmailAndPassword(auth, emailForFirebase, password);
+
+            // --- 4. CẬP NHẬT TÊN NHÂN VIÊN VÀO PROFILE ---
+            if (userCredential.user) {
+                await updateProfile(userCredential.user, {
+                    displayName: employeeName.trim(),
+                });
+            }
+
+            Alert.alert('Thành công', 'Đăng ký tài khoản thành công!');
+            // Reset các trường
+            setPassword('');
+            setPhoneNumber('');
+            setEmployeeName('');
+            setIsSignUp(false);
+        } catch (error) {
+            let errorMessage = 'Đăng ký thất bại. Vui lòng thử lại.';
+            if (error.code === 'auth/email-already-in-use') {
+                errorMessage = 'Số điện thoại này đã được sử dụng. Vui lòng đăng nhập hoặc dùng số khác.';
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = 'Số điện thoại không hợp lệ.';
+            }
+            Alert.alert('Lỗi đăng ký', errorMessage);
+            console.error('Lỗi đăng ký:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Hàm xử lý đăng nhập (GIỮ NGUYÊN)
+    const handleSignIn = async () => {
+        if (!phoneNumber || !password) {
+            Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại và mật khẩu.');
+            return;
+        }
+
+        const emailForFirebase = `${phoneNumber}@suhii.app`;
+        setLoading(true);
+        try {
+            await signInWithEmailAndPassword(auth, emailForFirebase, password);
+            // Alert.alert('Thành công', 'Đăng nhập thành công!'); // Không cần alert khi có điều hướng tự động
+            // State sẽ được reset bởi listener trong App.js
+        } catch (error) {
+            let errorMessage = 'Đăng nhập thất bại. Vui lòng kiểm tra lại số điện thoại và mật khẩu.';
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                errorMessage = 'Số điện thoại hoặc mật khẩu không đúng.';
+            } else if (error.code === 'auth/user-disabled') {
+                errorMessage = 'Tài khoản của bạn đã bị vô hiệu hóa.';
+            }
+            Alert.alert('Lỗi đăng nhập', errorMessage);
+            console.error('Lỗi đăng nhập:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Chuyển đổi giữa Đăng nhập và Đăng ký
+    const toggleAuthMode = () => {
+        setIsSignUp(!isSignUp);
+        // Reset state khi chuyển mode
+        setPassword('');
+        setPhoneNumber('');
+        setEmployeeName('');
     }
 
-    if (password.length < 6) {
-      Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự.');
-      return;
-    }
+    return (
+        <ScrollView contentContainerStyle={styles.container}>
+            <Text style={styles.title}>
+                {isSignUp ? 'Đăng ký tài khoản' : 'Đăng nhập'}
+            </Text>
 
-    const emailForFirebase = `${phoneNumber}@suhii.app`; // Tạo email giả từ số điện thoại
-    setLoading(true);
-    try {
-      // Tạo tài khoản mới với email và mật khẩu
-      await createUserWithEmailAndPassword(auth, emailForFirebase, password);
-      Alert.alert('Thành công', 'Đăng ký tài khoản thành công!');
-      setEmail('');
-      setPassword('');
-      setPhoneNumber('');
-      setIsSignUp(false); // Chuyển sang chế độ đăng nhập sau khi đăng ký thành công
-    } catch (error) {
-      let errorMessage = 'Đăng ký thất bại. Vui lòng thử lại.';
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'Số điện thoại này đã được sử dụng. Vui lòng đăng nhập hoặc dùng số khác.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Số điện thoại không hợp lệ.';
-      }
-      Alert.alert('Lỗi đăng ký', errorMessage + ` (Mã lỗi: ${error.code})`);
-      console.error('Lỗi đăng ký:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+            {/* --- 5. HIỂN THỊ CÓ ĐIỀU KIỆN TRƯỜNG NHẬP TÊN --- */}
+            {isSignUp && (
+                <TextInput
+                    style={styles.input}
+                    placeholder="Tên nhân viên"
+                    value={employeeName}
+                    onChangeText={setEmployeeName}
+                    autoCapitalize="words" // Tự động viết hoa chữ cái đầu
+                />
+            )}
 
-  // Hàm xử lý đăng nhập
-  const handleSignIn = async () => {
-    if (!phoneNumber || !password) {
-      Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại và mật khẩu.');
-      return;
-    }
+            <TextInput
+                style={styles.input}
+                placeholder="Số điện thoại (dùng làm tên đăng nhập)"
+                keyboardType="phone-pad"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+            />
+            <TextInput
+                style={styles.input}
+                placeholder="Mật khẩu (ít nhất 6 ký tự)"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+            />
 
-    const emailForFirebase = `${phoneNumber}@suhii.app`; // Tạo email giả từ số điện thoại
-    setLoading(true);
-    try {
-      // Đăng nhập với email và mật khẩu
-      await signInWithEmailAndPassword(auth, emailForFirebase, password);
-      Alert.alert('Thành công', 'Đăng nhập thành công!');
-      // Ở đây, bạn sẽ điều hướng người dùng đến màn hình chính của ứng dụng
-      // (Chúng ta sẽ làm điều này ở bước tiếp theo với React Navigation)
-      setEmail('');
-      setPassword('');
-      setPhoneNumber('');
-    } catch (error) {
-      let errorMessage = 'Đăng nhập thất bại. Vui lòng kiểm tra lại số điện thoại và mật khẩu.';
-      if (error.code === 'auth/invalid-credential') {
-         errorMessage = 'Số điện thoại hoặc mật khẩu không đúng.';
-      } else if (error.code === 'auth/user-disabled') {
-        errorMessage = 'Tài khoản của bạn đã bị vô hiệu hóa.';
-      }
-      Alert.alert('Lỗi đăng nhập', errorMessage + ` (Mã lỗi: ${error.code})`);
-      console.error('Lỗi đăng nhập:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+            <TouchableOpacity
+                style={styles.button}
+                onPress={isSignUp ? handleSignUp : handleSignIn}
+                disabled={loading}
+            >
+                {loading ? (
+                    <ActivityIndicator color="#fff" />
+                ) : (
+                    <Text style={styles.buttonText}>
+                        {isSignUp ? 'Đăng ký' : 'Đăng nhập'}
+                    </Text>
+                )}
+            </TouchableOpacity>
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>
-        {isSignUp ? 'Đăng ký tài khoản' : 'Đăng nhập'}
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Số điện thoại (dùng làm tên đăng nhập)"
-        keyboardType="phone-pad" // Bàn phím số điện thoại
-        value={phoneNumber}
-        onChangeText={setPhoneNumber}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Mật khẩu (ít nhất 6 ký tự)"
-        secureTextEntry // Ẩn mật khẩu
-        value={password}
-        onChangeText={setPassword}
-      />
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={isSignUp ? handleSignUp : handleSignIn}
-        disabled={loading} // Vô hiệu hóa nút khi đang xử lý
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" /> // Hiển thị vòng quay loading
-        ) : (
-          <Text style={styles.buttonText}>
-            {isSignUp ? 'Đăng ký' : 'Đăng nhập'}
-          </Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.switchButton}
-        onPress={() => setIsSignUp(!isSignUp)}
-      >
-        <Text style={styles.switchButtonText}>
-          {isSignUp
-            ? 'Bạn đã có tài khoản? Đăng nhập'
-            : 'Bạn chưa có tài khoản? Đăng ký'}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
+            <TouchableOpacity
+                style={styles.switchButton}
+                onPress={toggleAuthMode}
+            >
+                <Text style={styles.switchButtonText}>
+                    {isSignUp
+                        ? 'Bạn đã có tài khoản? Đăng nhập'
+                        : 'Bạn chưa có tài khoản? Đăng ký'}
+                </Text>
+            </TouchableOpacity>
+        </ScrollView>
+    );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#f5f5f5',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 30,
-    color: '#333',
-  },
-  input: {
-    width: '100%',
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    marginBottom: 15,
-    backgroundColor: '#fff',
-    fontSize: 16,
-  },
-  button: {
-    width: '100%',
-    padding: 15,
-    backgroundColor: '#007bff',
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  switchButton: {
-    marginTop: 20,
-    padding: 10,
-  },
-  switchButtonText: {
-    color: '#007bff',
-    fontSize: 16,
-  },
+    container: {
+        flexGrow: 1, // Dùng flexGrow thay cho flex để ScrollView hoạt động
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: '#f5f5f5',
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        marginBottom: 30,
+        color: '#333',
+    },
+    input: {
+        width: '100%',
+        padding: 15,
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 8,
+        marginBottom: 15,
+        backgroundColor: '#fff',
+        fontSize: 16,
+    },
+    button: {
+        width: '100%',
+        padding: 15,
+        backgroundColor: '#007bff',
+        borderRadius: 8,
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    buttonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    switchButton: {
+        marginTop: 20,
+        padding: 10,
+    },
+    switchButtonText: {
+        color: '#007bff',
+        fontSize: 16,
+    },
 });
 
 export default AuthScreen;
