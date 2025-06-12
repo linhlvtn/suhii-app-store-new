@@ -64,21 +64,30 @@ const StoreScreen = () => {
     useEffect(() => {
         const processAndGroupReports = () => {
             const grouped = rawReports.reduce((acc, report) => {
+                // Đảm bảo createdAt tồn tại và là một đối tượng hợp lệ
                 if (report.createdAt && report.createdAt.toDate) {
-                    const reportDateStr = report.createdAt.toDate().toISOString().split('T')[0];
-                    const displayDate = getFormattedDate(report.createdAt.toDate());
-                    if (!acc[reportDateStr]) {
-                        acc[reportDateStr] = { title: displayDate, rawDate: report.createdAt.toDate(), totalRevenue: 0, data: [] };
+                    const reportDate = report.createdAt.toDate();
+                    
+                    // SỬA: Dùng toDateString() để lấy ngày theo múi giờ địa phương làm key gom nhóm
+                    // Điều này đảm bảo tất cả báo cáo trong cùng một ngày (giờ địa phương) sẽ vào chung 1 nhóm
+                    const groupKey = reportDate.toDateString(); 
+
+                    const displayDate = getFormattedDate(reportDate);
+                    
+                    if (!acc[groupKey]) {
+                        acc[groupKey] = { title: displayDate, rawDate: reportDate, totalRevenue: 0, data: [] };
                     }
-                    acc[reportDateStr].data.push(report);
-                    acc[reportDateStr].totalRevenue += report.price;
+                    acc[groupKey].data.push(report);
+                    acc[groupKey].totalRevenue += report.price;
                 }
                 return acc;
             }, {});
 
+            // Sắp xếp các nhóm theo ngày giảm dần, đảm bảo ngày mới nhất luôn ở trên
             const sortedSections = Object.values(grouped).sort((a, b) => b.rawDate - a.rawDate);
             setSections(sortedSections);
         };
+        
         processAndGroupReports();
     }, [rawReports]);
 
