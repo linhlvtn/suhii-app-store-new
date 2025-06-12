@@ -13,7 +13,7 @@ import { auth } from '../../firebaseConfig';
 // Import các màn hình
 import StoreScreen from '../screens/StoreScreen';
 import CreateReportScreen from '../screens/CreateReportScreen';
-import StatisticsScreen from '../screens/StatisticsScreen';
+import StatisticsScreen from '../screens/Statistics'; 
 import EditReportScreen from '../screens/EditReportScreen';
 
 const COLORS = {
