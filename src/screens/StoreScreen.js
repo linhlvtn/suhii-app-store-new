@@ -229,7 +229,6 @@ const StoreScreen = () => {
                     )}
                 </TouchableOpacity>
             </View>
-            
             <Modal
                 transparent={true}
                 animationType="fade"

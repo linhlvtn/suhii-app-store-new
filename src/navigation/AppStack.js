@@ -15,6 +15,7 @@ import StoreScreen from '../screens/StoreScreen';
 import CreateReportScreen from '../screens/CreateReportScreen';
 import StatisticsScreen from '../screens/Statistics'; 
 import EditReportScreen from '../screens/EditReportScreen';
+import EmployeeStatisticsScreen from '../screens/EmployeeStatisticsScreen';
 
 const COLORS = {
     black: '#121212',
@@ -146,6 +147,14 @@ const AppStack = () => {
                         title: 'Tạo Báo Cáo Mới',
                         headerTitle: 'Tạo Báo Cáo Mới',
                         headerRight: null,
+                    }} 
+                />
+
+                <Stack.Screen 
+                    name="EmployeeStatistics" 
+                    component={EmployeeStatisticsScreen} 
+                    options={{ 
+                    headerShown: false,
                     }} 
                 />
             </Stack.Navigator>
