@@ -5,6 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+     "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#FFFFFF",
+      "iosDisplayInForeground": true,
+      "vapidPublicKey": "BIb4C__KnHt7yBRagtr4imiIIekGKxrG5jgDz6Znfuu2T0XBVUHHuu6NcPCTrPbh4NtkU8ytshDO9pyS-a_2eko"
+    },
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "jsEngine": "jsc",
@@ -28,6 +34,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2ba5c127-ad5f-4159-a757-c97ec9a8f08e"
+      }
+    },
+    "owner": "linhlvtn"
   }
 }

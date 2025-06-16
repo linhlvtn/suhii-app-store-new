@@ -87,42 +87,73 @@ const CreateReportScreen = ({ navigation }) => {
     const uploadImageToCloudinary = async (uri) => { if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) { Alert.alert('Lỗi cấu hình Cloudinary'); return null; } const formData = new FormData(); formData.append('file', { uri: uri, type: 'image/jpeg', name: 'report_image.jpg' }); formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); try { const response = await axios.post(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }); return response.data.secure_url; } catch (error) { console.error('Lỗi tải ảnh:', error); Alert.alert('Lỗi tải ảnh'); return null; } };
     const handleImagePick = () => { Alert.alert("Thêm hình ảnh", "Chọn nguồn ảnh", [{ text: "Thư viện", onPress: pickImage }, { text: "Camera", onPress: takePhoto }, { text: "Hủy", style: "cancel" }]); }
 
-    const handleSubmitReport = async () => {
+   const handleSubmitReport = async () => {
         const numericPrice = parseFloat(rawPrice);
-        // SỬA: Kiểm tra mảng dịch vụ có rỗng không
-        if (!rawPrice || selectedServices.length === 0 || !paymentMethod || !imageUri) {
-            Alert.alert('Lỗi', 'Vui lòng điền đầy đủ giá tiền, chọn ít nhất một dịch vụ, hình thức thanh toán.');
+
+        // SỬA LỖI TẠI ĐÂY:
+        // 1. Kiểm tra xem mảng `selectedServices` có rỗng không, thay vì biến `service`.
+        // 2. Thay đổi thông báo lỗi cho phù hợp.
+        if (!rawPrice || selectedServices.length === 0 || !paymentMethod) {
+            Alert.alert('Lỗi', 'Vui lòng điền đầy đủ giá tiền, chọn ít nhất một dịch vụ và hình thức thanh toán.');
             return;
         }
-        // ... (phần còn lại của hàm giữ nguyên)
-        if (isNaN(numericPrice) || numericPrice <= 0) { Alert.alert('Lỗi', 'Giá tiền không hợp lệ.'); return; }
+
+        if (isNaN(numericPrice) || numericPrice <= 0) {
+            Alert.alert('Lỗi', 'Giá tiền không hợp lệ.');
+            return;
+        }
         setLoading(true);
         try {
             const currentUser = auth.currentUser;
-            if (!currentUser) { Alert.alert('Lỗi', 'Bạn cần đăng nhập.'); setLoading(false); return; }
-            const imageUrl = await uploadImageToCloudinary(imageUri);
-            if (!imageUrl) { setLoading(false); return; }
+            if (!currentUser) {
+                Alert.alert('Lỗi', 'Bạn cần đăng nhập để tạo báo cáo.');
+                setLoading(false);
+                return;
+            }
 
-            // SỬA: Lưu mảng `selectedServices` vào field `services`
+            let imageUrl = '';
+            if (imageUri) {
+                imageUrl = await uploadImageToCloudinary(imageUri);
+                if (!imageUrl) {
+                    setLoading(false);
+                    return;
+                }
+            }
+            
+            // SỬA LỖI TẠI ĐÂY:
+            // Đổi tên trường từ `service` thành `services` (nếu bạn muốn lưu mảng)
+            // hoặc dùng `join` để lưu thành chuỗi cho đồng bộ với màn hình StoreScreen.
+            // Tôi đề xuất dùng join() để giữ cấu trúc đơn giản.
             await addDoc(collection(db, 'reports'), {
                 userId: currentUser.uid,
                 userEmail: currentUser.email,
                 employeeName: currentUser.displayName || currentUser.email.split('@')[0],
                 price: numericPrice,
-                services: selectedServices, // Sửa 'service' thành 'services' và truyền mảng vào
+                service: selectedServices.join(', '), // Lưu mảng các dịch vụ thành một chuỗi
                 note: note,
                 paymentMethod: paymentMethod,
                 imageUrl: imageUrl,
                 createdAt: serverTimestamp(),
+                status: 'pending',
             });
 
-            Alert.alert('Thành công', 'Báo cáo đã được tạo thành công!');
-            // SỬA: Reset mảng dịch vụ
-            setPrice(''); setRawPrice(''); setSelectedServices([]); setNote('');
-            setPaymentMethod(PAYMENT_OPTIONS[0].value); setImageUri(null);
+            Alert.alert('Thành công', 'Báo cáo đã được gửi và đang chờ duyệt!');
+            
+            // SỬA LỖI TẠI ĐÂY: Reset mảng `selectedServices` về rỗng
+            setPrice(''); 
+            setRawPrice(''); 
+            setSelectedServices([]);
+            setNote('');
+            setPaymentMethod(PAYMENT_OPTIONS[0].value); 
+            setImageUri(null);
+            
             navigation.goBack();
-        } catch (error) { console.error('Lỗi:', error); Alert.alert('Lỗi', 'Có lỗi xảy ra.'); } 
-        finally { setLoading(false); }
+        } catch (error) { 
+            console.error('Lỗi khi gửi báo cáo:', error); 
+            Alert.alert('Lỗi', 'Có lỗi xảy ra khi tạo báo cáo.'); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     return (
