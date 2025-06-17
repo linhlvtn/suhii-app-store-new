@@ -1,5 +1,3 @@
-// src/navigation/AppStack.js
-
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -37,6 +35,9 @@ const CustomTabBarButton = ({ children, onPress }) => (
     </TouchableOpacity>
 );
 
+// --- COMPONENT RỖNG CHO NÚT GIỮA (ĐỊNH NGHĨA 1 LẦN) ---
+const EmptyComponent = () => null;
+
 function MainTabs() {
     const navigation = useNavigation();
     return (
@@ -64,7 +65,8 @@ function MainTabs() {
             />
             <Tab.Screen 
                 name="CreateReportTab" 
-                component={() => null} 
+                // --- SỬA LỖI Ở ĐÂY ---
+                component={EmptyComponent} // <-- Sử dụng component đã được định nghĩa
                 options={{
                     tabBarButton: (props) => (
                         <CustomTabBarButton {...props} onPress={() => navigation.navigate('CreateReport')} />
@@ -91,7 +93,7 @@ export default function AppStack() {
                     name="MainTabs" 
                     component={MainTabs} 
                     options={{ 
-                        headerShown: false, // <-- TẮT HEADER MẶC ĐỊNH Ở ĐÂY
+                        headerShown: false,
                     }}
                 />
                 <Stack.Screen name="CreateReport" component={CreateReportScreen} options={{ headerShown: false }} />
@@ -106,9 +108,7 @@ export default function AppStack() {
 const styles = StyleSheet.create({
     tabBar: {
         position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
+        bottom: 0, left: 0, right: 0,
         backgroundColor: COLORS.white,
         height: 65,
         borderTopWidth: 1,

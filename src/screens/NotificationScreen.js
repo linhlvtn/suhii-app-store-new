@@ -1,14 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Platform } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+// src/screens/NotificationScreen.js
 
-// Dữ liệu giả để dựng giao diện
-const dummyNotifications = [
-    { id: '1', title: 'Báo cáo mới cần duyệt', body: 'Nhân viên A đã tạo một báo cáo mới.', createdAt: '10:30 15/06/2025', read: false },
-    { id: '2', title: 'Báo cáo đã được duyệt', body: 'Báo cáo cho dịch vụ "Nail" của bạn đã được duyệt.', createdAt: '09:00 15/06/2025', read: true },
-    { id: '3', title: 'Báo cáo bị từ chối', body: 'Báo cáo cho dịch vụ "Mi" của bạn đã bị từ chối.', createdAt: '18:00 14/06/2025', read: true },
-];
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Platform, ActivityIndicator } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { collection, query, where, orderBy, onSnapshot, getDocs, writeBatch } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
+import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
     primary: '#1a1a1a',
@@ -20,16 +18,87 @@ const COLORS = {
 
 const NotificationScreen = () => {
     const navigation = useNavigation();
+    const { user } = useAuth(); // Lấy thông tin người dùng từ context
+
+    const [notifications, setNotifications] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Sử dụng useFocusEffect để lắng nghe và đánh dấu đã đọc khi vào màn hình
+    useFocusEffect(
+        useCallback(() => {
+            if (!user) {
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            
+            // Tạo truy vấn để lấy thông báo của người dùng, sắp xếp mới nhất lên trên
+            const q = query(
+                collection(db, "notifications"),
+                where("userId", "==", user.uid),
+                orderBy("createdAt", "desc")
+            );
+
+            // onSnapshot sẽ tự động lắng nghe thay đổi theo thời gian thực
+            const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                const fetchedNotifications = [];
+                querySnapshot.forEach((doc) => {
+                    fetchedNotifications.push({ id: doc.id, ...doc.data() });
+                });
+                setNotifications(fetchedNotifications);
+                setLoading(false);
+
+                // Sau khi đã tải, tự động đánh dấu các thông báo này là đã đọc
+                markNotificationsAsRead(fetchedNotifications);
+            }, (error) => {
+                console.error("Lỗi khi lắng nghe thông báo:", error);
+                setLoading(false);
+            });
+
+            // Hủy lắng nghe khi rời khỏi màn hình để tránh rò rỉ bộ nhớ
+            return () => unsubscribe();
+
+        }, [user])
+    );
+    
+    // Hàm để đánh dấu các thông báo là đã đọc
+    const markNotificationsAsRead = async (notificationsToMark) => {
+        if (!notificationsToMark || notificationsToMark.length === 0) return;
+
+        const unreadNotifications = notificationsToMark.filter(n => !n.read);
+        if (unreadNotifications.length === 0) return;
+
+        const batch = writeBatch(db);
+        unreadNotifications.forEach(notification => {
+            const docRef = doc(db, "notifications", notification.id);
+            batch.update(docRef, { read: true });
+        });
+
+        try {
+            await batch.commit();
+            console.log("Đã đánh dấu các thông báo là đã đọc.");
+        } catch (error) {
+            console.error("Lỗi khi đánh dấu đã đọc:", error);
+        }
+    };
+
 
     const renderItem = ({ item }) => (
         <View style={[styles.notificationItem, !item.read && styles.unreadItem]}>
             <View style={styles.iconContainer}>
-                <Ionicons name={item.read ? "notifications-outline" : "notifications"} size={24} color={COLORS.primary} />
+                <Ionicons 
+                    name={!item.read ? "notifications" : "notifications-outline"} 
+                    size={24} 
+                    color={!item.read ? COLORS.primary : COLORS.secondary} 
+                />
             </View>
             <View style={styles.contentContainer}>
-                <Text style={styles.title}>{item.title}</Text>
-                <Text style={styles.body}>{item.body}</Text>
-                <Text style={styles.timestamp}>{item.createdAt}</Text>
+                <Text style={styles.title}>{item.title || 'Thông báo'}</Text>
+                <Text style={styles.body}>{item.body || '...'}</Text>
+                <Text style={styles.timestamp}>
+                    {item.createdAt ? new Date(item.createdAt.toDate()).toLocaleString('vi-VN') : ''}
+                </Text>
             </View>
         </View>
     );
@@ -44,13 +113,22 @@ const NotificationScreen = () => {
                 <View style={{ width: 40 }} /> 
             </View>
 
-            <FlatList
-                data={dummyNotifications}
-                renderItem={renderItem}
-                keyExtractor={item => item.id}
-                contentContainerStyle={styles.listContainer}
-                ListEmptyComponent={<Text style={styles.emptyText}>Bạn chưa có thông báo nào.</Text>}
-            />
+            {loading ? (
+                <ActivityIndicator size="large" color={COLORS.primary} style={{ flex: 1 }}/>
+            ) : (
+                <FlatList
+                    data={notifications}
+                    renderItem={renderItem}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={styles.listContainer}
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Ionicons name="notifications-off-outline" size={60} color="#ccc" />
+                            <Text style={styles.emptyText}>Bạn chưa có thông báo nào.</Text>
+                        </View>
+                    }
+                />
+            )}
         </View>
     );
 };
@@ -81,6 +159,7 @@ const styles = StyleSheet.create({
     },
     listContainer: {
         paddingVertical: 10,
+        flexGrow: 1,
     },
     notificationItem: {
         flexDirection: 'row',
@@ -113,9 +192,15 @@ const styles = StyleSheet.create({
         color: '#999',
         marginTop: 6,
     },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
     emptyText: {
         textAlign: 'center',
-        marginTop: 50,
+        marginTop: 20,
         fontSize: 16,
         color: COLORS.secondary,
     }
