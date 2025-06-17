@@ -1,13 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, SectionList, StyleSheet, ActivityIndicator, RefreshControl, Image, TouchableOpacity, Alert, Modal, Platform, TouchableWithoutFeedback } from 'react-native';
-import { collection, getDocs, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../firebaseConfig';
-import { useNavigation } from '@react-navigation/native';
+import { collection, getDocs, query, orderBy, where, doc, getDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../../firebaseConfig';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
-
-// --- IMPORT CONTEXT ---
 import { useAuth } from '../context/AuthContext';
 
 // Cấu hình ngôn ngữ tiếng Việt cho Lịch
@@ -21,8 +19,14 @@ LocaleConfig.locales['vi'] = {
 LocaleConfig.defaultLocale = 'vi';
 
 const COLORS = { 
-    black: '#121212', white: '#FFFFFF', gray: '#888888', lightGray: '#F5F5F5', primary: '#007bff',
-    pending: '#f39c12', approved: '#28a745', rejected: '#D32F2F',
+    black: '#121212', 
+    white: '#FFFFFF', 
+    gray: '#888888', 
+    lightGray: '#F5F5F5', 
+    primary: '#007bff',
+    pending: '#f39c12',
+    approved: '#28a745',
+    rejected: '#D32F2F',
 };
 
 const getFormattedDate = (date) => {
@@ -39,60 +43,96 @@ const getFormattedDate = (date) => {
 };
 
 
-const StoreScreen = () => {
-    // --- LẤY DỮ LIỆU TỪ CONTEXT ---
-    const { user, userRole, initializing: authInitializing } = useAuth();
+// --- CÁC COMPONENT CON CHO HEADER (DI CHUYỂN VÀO ĐÂY) ---
+const HeaderLogo = () => (
+    <Image source={require('../../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />
+);
 
+const NotificationButton = () => {
+    const navigation = useNavigation();
+    const { user } = useAuth();
+    const [hasUnread, setHasUnread] = useState(false);
+
+    useEffect(() => {
+        if (!user) return;
+        const q = query(collection(db, "notifications"), where("userId", "==", user.uid), where("read", "==", false));
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            setHasUnread(!querySnapshot.empty);
+        });
+        return () => unsubscribe();
+    }, [user]);
+
+    return (
+        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.navigate('Notification')}>
+            <Ionicons name="notifications-outline" size={28} color={COLORS.black} />
+            {hasUnread && <View style={styles.notificationBadge} />}
+        </TouchableOpacity>
+    );
+};
+
+const HeaderLogoutButton = () => {
+    const handleSignOut = () => {
+        Alert.alert("Xác nhận Đăng xuất", "Bạn có chắc muốn đăng xuất?", [
+            { text: "Hủy", style: "cancel" },
+            { text: "Đăng xuất", onPress: () => auth.signOut(), style: "destructive" }
+        ]);
+    };
+    return (
+        <TouchableOpacity onPress={handleSignOut} style={styles.headerButton}>
+            <Ionicons name="log-out-outline" size={28} color={COLORS.black} />
+        </TouchableOpacity>
+    );
+};
+// --- KẾT THÚC COMPONENT CON CHO HEADER ---
+
+
+const StoreScreen = () => {
+    const { user, userRole, initializing: authInitializing } = useAuth();
     const [rawReports, setRawReports] = useState([]);
     const [sections, setSections] = useState([]);
     const [selectedDate, setSelectedDate] = useState(null);
     const [statusFilter, setStatusFilter] = useState('all');
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [isImageModalVisible, setImageModalVisible] = useState(false);
     const [selectedImageUrl, setSelectedImageUrl] = useState(null);
     
     const navigation = useNavigation();
 
-    // --- LOGIC MỚI: ĐƠN GIẢN HÓA VIỆC TẢI DỮ LIỆU ---
     const fetchReports = useCallback(async () => {
-        if (!userRole) return; // Không làm gì nếu vai trò chưa được xác định
-
+        if (!userRole) return;
         setLoading(true);
         try {
             const reportsRef = collection(db, 'reports');
             let queries = [orderBy('createdAt', 'desc')];
-            
             if (userRole === 'employee' && user) {
                 queries.push(where('userId', '==', user.uid));
             } else if (userRole === 'admin' && statusFilter !== 'all') {
                 queries.push(where('status', '==', statusFilter));
             }
-
             if (selectedDate) {
                 const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0);
                 const endOfDay = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999);
                 queries.push(where('createdAt', '>=', startOfDay), where('createdAt', '<=', endOfDay));
             }
-
             const q = query(reportsRef, ...queries);
             const snapshots = await getDocs(q);
             setRawReports(snapshots.docs.map(d => ({ id: d.id, ...d.data() })));
         } catch (error) {
             console.error("Lỗi khi tải báo cáo:", error);
-            Alert.alert("Lỗi tải dữ liệu", "Có thể bạn cần tạo chỉ mục (index) trong Firestore.");
+            Alert.alert("Lỗi tải dữ liệu", "Có thể bạn cần tạo chỉ mục trong Firestore.");
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, [user, userRole, statusFilter, selectedDate]);
 
-    // useEffect này sẽ tự động chạy khi vai trò hoặc các bộ lọc thay đổi
-    useEffect(() => {
-        fetchReports();
-    }, [fetchReports]);
-
+    useFocusEffect(useCallback(() => {
+        if (userRole) {
+            fetchReports();
+        }
+    }, [userRole, fetchReports]));
 
     useEffect(() => {
         const processAndGroupReports = () => {
@@ -126,7 +166,7 @@ const StoreScreen = () => {
     const closeImagePreview = () => { setImageModalVisible(false); setSelectedImageUrl(null); };
 
     const handleUpdateStatus = async (reportId, newStatus) => {
-        Alert.alert( `Xác nhận`, `Bạn có chắc muốn ${newStatus === 'approved' ? 'duyệt' : 'từ chối'} báo cáo này?`, [
+        Alert.alert(`Xác nhận`, `Bạn có chắc muốn ${newStatus === 'approved' ? 'duyệt' : 'từ chối'} báo cáo này?`, [
             { text: "Hủy" },
             { text: "Đồng ý", onPress: async () => {
                 try {
@@ -165,13 +205,9 @@ const StoreScreen = () => {
                             <Menu>
                                 <MenuTrigger style={styles.menuTrigger}><Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} /></MenuTrigger>
                                 <MenuOptions customStyles={menuOptionsStyles}>
-                                    <MenuOption onSelect={() => handleEdit(item)}>
-                                        <Text>Chỉnh sửa</Text>
-                                    </MenuOption>
+                                    <MenuOption onSelect={() => handleEdit(item)} text='Chỉnh sửa' />
                                     <View style={styles.divider} />
-                                    <MenuOption onSelect={() => handleDelete(item.id)}>
-                                        <Text style={{ color: 'red' }}>Xóa</Text>
-                                    </MenuOption>
+                                    <MenuOption onSelect={() => handleDelete(item.id)}><Text style={{ color: 'red' }}>Xóa</Text></MenuOption>
                                 </MenuOptions>
                             </Menu>
                         )}
@@ -203,11 +239,21 @@ const StoreScreen = () => {
     );
 
     if (authInitializing) {
-        return <View style={styles.fullScreenLoader}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
+        return <View style={styles.fullScreenLoader}><ActivityIndicator size="large" color={COLORS.black} /></View>;
     }
 
     return (
         <View style={styles.container}>
+            {/* --- HEADER MỚI ĐƯỢC THÊM TRỰC TIẾP VÀO ĐÂY --- */}
+            <View style={styles.header}>
+                <View style={{ width: 100 }} />
+                <HeaderLogo />
+                <View style={styles.headerRightContainer}>
+                    <NotificationButton />
+                    <HeaderLogoutButton />
+                </View>
+            </View>
+            
             {userRole === 'admin' && (
                 <View style={styles.filterBar}>
                     <View style={styles.filterSegment}>
@@ -230,7 +276,7 @@ const StoreScreen = () => {
                 </TouchableWithoutFeedback>
             </Modal>
             
-            {loading ? <View style={{ flex: 1, justifyContent: 'center'}}><ActivityIndicator size="large" /></View> : (
+            {loading ? <ActivityIndicator size="large" style={{ flex: 1 }} /> : (
                  <SectionList
                     sections={sections}
                     keyExtractor={(item, index) => item.id + index}
@@ -256,6 +302,44 @@ const StoreScreen = () => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.white },
     fullScreenLoader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: Platform.OS === 'android' ? 40 : 50,
+        paddingBottom: 10,
+        paddingHorizontal: 15,
+        backgroundColor: COLORS.white,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.lightGray,
+    },
+    headerLogo: {
+        width: 100,
+        height: 40,
+    },
+    headerRightContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: 100,
+        justifyContent: 'flex-end',
+    },
+    headerButton: {
+        width: 45, 
+        height: 45, 
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    notificationBadge: {
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: 'red',
+        borderWidth: 1.5,
+        borderColor: COLORS.white,
+    },
     filterBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, backgroundColor: COLORS.lightGray, borderBottomWidth: 1, borderBottomColor: '#e0e0e0',},
     filterSegment: { flexDirection: 'row', backgroundColor: '#e0e0e0', borderRadius: 8, },
     segmentButton: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, },
@@ -273,18 +357,17 @@ const styles = StyleSheet.create({
     sectionRevenueText: { fontWeight: '600', color: COLORS.gray },
     itemContainer: { flexDirection: 'row', backgroundColor: COLORS.white, padding: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
     itemImage: { width: 100, height: 100, borderRadius: 10 },
-    itemContent: { flex: 1, marginLeft: 12, justifyContent: 'flex-start' },
-    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 },
+    itemContent: { flex: 1, marginLeft: 12, justifyContent: 'space-between' },
+    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
     serviceText: { fontSize: 16, fontWeight: 'bold', color: COLORS.black, flex: 1, marginRight: 5 },
-    priceText: { fontSize: 15, fontWeight: '600', color: COLORS.primary, marginBottom: 8 },
-    infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+    priceText: { fontSize: 15, fontWeight: '600', color: COLORS.black, marginVertical: 4 },
+    infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
     infoText: { marginLeft: 8, fontSize: 13, color: COLORS.gray, flexShrink: 1 },
     statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
     statusBadgeText: { color: COLORS.white, fontSize: 11, fontWeight: 'bold' },
     menuTrigger: { padding: 5, },
-    adminMenu: { position: 'absolute', top: -5, right: -10 },
     adminActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 10, marginTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-    actionButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginRight: 10 },
+    actionButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginLeft: 10 },
     actionButtonText: { color: 'white', fontWeight: 'bold', marginLeft: 5, fontSize: 13 },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50, },
     emptyText: { textAlign: 'center', color: COLORS.gray, fontSize: 16 },

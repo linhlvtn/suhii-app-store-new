@@ -1,7 +1,9 @@
+// src/navigation/AppStack.js
+
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { MenuProvider } from 'react-native-popup-menu';
@@ -25,8 +27,13 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 const CustomTabBarButton = ({ children, onPress }) => (
-    <TouchableOpacity style={styles.customButtonContainer} onPress={onPress}>
-        <View style={styles.customButtonView}>{children}</View>
+    <TouchableOpacity
+        style={styles.customButtonContainer}
+        onPress={onPress}
+    >
+        <View style={styles.customButtonView}>
+            {children}
+        </View>
     </TouchableOpacity>
 );
 
@@ -48,12 +55,30 @@ function MainTabs() {
                 tabBarInactiveTintColor: COLORS.gray,
             })}
         >
-            <Tab.Screen name="Store" component={StoreScreen} options={{ tabBarIcon: ({ color, size }) => (<Ionicons name="home-outline" color={color} size={size} />), }} />
-            <Tab.Screen name="CreateReportTab" component={() => null} options={{
-                tabBarButton: (props) => (<CustomTabBarButton {...props} onPress={() => navigation.navigate('CreateReport')} />),
-                tabBarIcon: () => (<Ionicons name="add" size={32} color={COLORS.white} />)
-            }}/>
-            <Tab.Screen name="Statistics" component={StatisticsScreen} options={{ tabBarIcon: ({ color, size }) => (<Ionicons name="stats-chart-outline" color={color} size={size} />), }} />
+            <Tab.Screen 
+                name="Store" 
+                component={StoreScreen} 
+                options={{ 
+                    tabBarIcon: ({ color, size }) => (<Ionicons name="home-outline" color={color} size={size} />),
+                }} 
+            />
+            <Tab.Screen 
+                name="CreateReportTab" 
+                component={() => null} 
+                options={{
+                    tabBarButton: (props) => (
+                        <CustomTabBarButton {...props} onPress={() => navigation.navigate('CreateReport')} />
+                    ),
+                    tabBarIcon: () => (<Ionicons name="add" size={32} color={COLORS.white} />)
+                }}
+            />
+            <Tab.Screen 
+                name="Statistics" 
+                component={StatisticsScreen} 
+                options={{ 
+                    tabBarIcon: ({ color, size }) => (<Ionicons name="stats-chart-outline" color={color} size={size} />),
+                }} 
+            />
         </Tab.Navigator>
     );
 }
@@ -81,7 +106,9 @@ export default function AppStack() {
 const styles = StyleSheet.create({
     tabBar: {
         position: 'absolute',
-        bottom: 0, left: 0, right: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
         backgroundColor: COLORS.white,
         height: 65,
         borderTopWidth: 1,

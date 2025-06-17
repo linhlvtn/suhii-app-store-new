@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Alert, Platform } from 'react-native';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Alert, Platform, Image } from 'react-native';
+import { collection, query, where, getDocs, Timestamp, onSnapshot } from 'firebase/firestore';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
-import { db } from '../../../firebaseConfig';
+import { useNavigation } from '@react-navigation/native';
+import { db, auth } from '../../../firebaseConfig';
+import { useAuth } from '../../context/AuthContext';
 
+// --- IMPORT CÁC COMPONENT CON ---
 import TimeFilterSegment from './components/TimeFilterSegment';
 import SummaryCard from './components/SummaryCard';
 import StatsChart from './components/StatsChart';
 import RankItem from './components/RankItem';
 import ServicePieChart from './components/ServicePieChart';
 
+// Cấu hình ngôn ngữ tiếng Việt cho Lịch
 LocaleConfig.locales['vi'] = {
   monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
   dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'],
@@ -19,11 +23,60 @@ LocaleConfig.locales['vi'] = {
 };
 LocaleConfig.defaultLocale = 'vi';
 
+// --- THEME COLORS ---
 const COLORS = { 
-    primary: '#1a1a1a', secondary: '#555', white: '#FFFFFF', lightGray: '#f0f2f5', 
-    success: '#28a745', danger: '#D32F2F', 
+    primary: '#1a1a1a', 
+    secondary: '#555', 
+    white: '#FFFFFF', 
+    lightGray: '#f0f2f5', 
+    success: '#28a745', 
+    danger: '#D32F2F',
+    black: '#1a1a1a', // Thêm màu black để nhất quán
 };
 
+// --- CÁC COMPONENT CON CHO HEADER ---
+const HeaderLogo = () => (
+    <Image source={require('../../../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />
+);
+
+const NotificationButton = () => {
+    const navigation = useNavigation();
+    const { user } = useAuth();
+    const [hasUnread, setHasUnread] = useState(false);
+
+    useEffect(() => {
+        if (!user) return;
+        const q = query(collection(db, "notifications"), where("userId", "==", user.uid), where("read", "==", false));
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            setHasUnread(!querySnapshot.empty);
+        });
+        return () => unsubscribe();
+    }, [user]);
+
+    return (
+        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.navigate('Notification')}>
+            <Ionicons name="notifications-outline" size={28} color={COLORS.black} />
+            {hasUnread && <View style={styles.notificationBadge} />}
+        </TouchableOpacity>
+    );
+};
+
+const HeaderLogoutButton = () => {
+    const handleSignOut = () => {
+        Alert.alert("Xác nhận Đăng xuất", "Bạn có chắc muốn đăng xuất?", [
+            { text: "Hủy", style: "cancel" },
+            { text: "Đăng xuất", onPress: () => auth.signOut(), style: "destructive" }
+        ]);
+    };
+    return (
+        <TouchableOpacity onPress={handleSignOut} style={styles.headerButton}>
+            <Ionicons name="log-out-outline" size={28} color={COLORS.black} />
+        </TouchableOpacity>
+    );
+};
+
+
+// --- HELPER FUNCTIONS ---
 const getDateRange = (period, customDate = null) => {
     if (period === 'custom' && customDate) {
         let startDate = new Date(customDate);
@@ -58,7 +111,9 @@ const getDateRange = (period, customDate = null) => {
 };
 
 const getDynamicTitle = (period, date) => {
-    if (period === 'custom' && date) return `Ngày ${date.toLocaleDateString('vi-VN')}`;
+    if (period === 'custom' && date) {
+        return `Ngày ${date.toLocaleDateString('vi-VN')}`;
+    }
     const now = new Date();
     switch (period) {
         case 'today': return `Hôm nay, ${now.toLocaleDateString('vi-VN')}`;
@@ -72,6 +127,7 @@ const getDynamicTitle = (period, date) => {
     }
 }
 
+// --- MAIN COMPONENT ---
 const StatisticsScreen = () => {
     const [activeFilter, setActiveFilter] = useState('today');
     const [loading, setLoading] = useState(true);
@@ -116,7 +172,6 @@ const StatisticsScreen = () => {
                 return querySnapshot.docs.map(doc => doc.data());
             } catch (e) { 
                 console.error("Lỗi khi lấy báo cáo đã duyệt:", e);
-                // Alert.alert("Lỗi Index", "Có thể bạn cần tạo chỉ mục mới trong Firestore cho bộ lọc thống kê.");
                 return []; 
             }
         };
@@ -161,7 +216,6 @@ const StatisticsScreen = () => {
                 const diff = startOfWeek.getDate() - dayOfWeekForCalc + (dayOfWeekForCalc === 0 ? -6 : 1);
                 startOfWeek.setDate(diff);
                 const rangeForWeekChart = getDateRange('week', startOfWeek);
-
                 const reportsForWeekChart = await getReportsInRange(rangeForWeekChart);
 
                 reportsForWeekChart.forEach(report => {
@@ -225,26 +279,21 @@ const StatisticsScreen = () => {
 
     return (
         <View style={styles.container}>
-            <Modal transparent={true} animationType="fade" visible={isDatePickerVisible} onRequestClose={() => setDatePickerVisible(false)}>
-                <TouchableWithoutFeedback onPress={() => setDatePickerVisible(false)}>
-                    <View style={styles.datePickerBackdrop}>
-                        <TouchableWithoutFeedback>
-                            <View style={styles.datePickerContent}>
-                                <Calendar current={getSelectedDateString()} onDayPress={onDayPress} markedDates={{ [getSelectedDateString()]: {selected: true, disableTouchEvent: true, selectedColor: COLORS.primary} }} />
-                            </View>
-                        </TouchableWithoutFeedback>
-                    </View>
-                </TouchableWithoutFeedback>
-            </Modal>
+            <View style={styles.header}>
+                <View style={{ width: 100 }} /> 
+                <HeaderLogo />
+                <View style={styles.headerRightContainer}>
+                    <NotificationButton />
+                    <HeaderLogoutButton />
+                </View>
+            </View>
 
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.header}>
-                    <View>
-                        <Text style={styles.headerLabel}>Tổng quan</Text>
+                <View style={styles.subHeader}>
+                    <Text style={styles.headerLabel}>Tổng quan</Text>
+                    <TouchableOpacity style={styles.titleTouchable} onPress={() => setDatePickerVisible(true)}>
                         <Text style={styles.headerTitle}>{loading ? 'Đang tải...' : (dynamicTitle || 'Tổng quan')}</Text>
-                    </View>
-                    <TouchableOpacity style={styles.calendarButton} onPress={() => setDatePickerVisible(true)}>
-                        <Ionicons name="calendar-outline" size={26} color={COLORS.primary} />
+                        <Ionicons name="calendar-outline" size={24} color={COLORS.primary} style={{ marginLeft: 8 }}/>
                     </TouchableOpacity>
                 </View>
             
@@ -269,17 +318,44 @@ const StatisticsScreen = () => {
                     </>
                 )}
             </ScrollView>
+
+            <Modal transparent={true} animationType="fade" visible={isDatePickerVisible} onRequestClose={() => setDatePickerVisible(false)}>
+                <TouchableWithoutFeedback onPress={() => setDatePickerVisible(false)}>
+                    <View style={styles.datePickerBackdrop}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.datePickerContent}>
+                                <Calendar current={getSelectedDateString()} onDayPress={onDayPress} markedDates={{ [getSelectedDateString()]: {selected: true, disableTouchEvent: true, selectedColor: COLORS.primary} }} />
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.lightGray, },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: Platform.OS === 'android' ? 40 : 50,
+        paddingBottom: 10,
+        paddingHorizontal: 15,
+        backgroundColor: COLORS.white,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.lightGray,
+    },
+    headerLogo: { width: 100, height: 40, },
+    headerRightContainer: { flexDirection: 'row', alignItems: 'center', width: 100, justifyContent: 'flex-end', },
+    headerButton: { width: 45, height: 45, justifyContent: 'center', alignItems: 'center', },
+    notificationBadge: { position: 'absolute', top: 10, right: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: 'red', borderWidth: 1.5, borderColor: COLORS.white, },
     scrollView: { flex: 1, },
     scrollContent: { paddingBottom: 120, },
-    header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', },
-    calendarButton: { padding: 8, },
+    subHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10, },
     headerLabel: { fontSize: 18, color: COLORS.secondary, marginBottom: 4, },
+    titleTouchable: { flexDirection: 'row', alignItems: 'center' },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: COLORS.primary, },
     loadingContainer: { height: 400, justifyContent: 'center', alignItems: 'center', },
     leaderboardContainer: { marginTop: 30, },
