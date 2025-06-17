@@ -8,7 +8,7 @@ import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-m
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useAuth } from '../context/AuthContext';
 
-// Cấu hình ngôn ngữ tiếng Việt cho Lịch
+// Cấu hình ngôn ngữ tiếng Việt cho Lịch (GIỮ NGUYÊN)
 LocaleConfig.locales['vi'] = {
   monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
   monthNamesShort: ['Th.1','Th.2','Th.3','Th.4','Th.5','Th.6','Th.7','Th.8','Th.9','Th.10','Th.11','Th.12'],
@@ -18,6 +18,7 @@ LocaleConfig.locales['vi'] = {
 };
 LocaleConfig.defaultLocale = 'vi';
 
+// --- Hằng số màu sắc và Hàm trợ giúp (GIỮ NGUYÊN) ---
 const COLORS = { 
     black: '#121212', 
     white: '#FFFFFF', 
@@ -43,7 +44,7 @@ const getFormattedDate = (date) => {
 };
 
 
-// --- CÁC COMPONENT CON CHO HEADER (DI CHUYỂN VÀO ĐÂY) ---
+// --- CÁC COMPONENT CON CHO HEADER (GIỮ NGUYÊN) ---
 const HeaderLogo = () => (
     <Image source={require('../../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />
 );
@@ -98,8 +99,12 @@ const StoreScreen = () => {
     const [isImageModalVisible, setImageModalVisible] = useState(false);
     const [selectedImageUrl, setSelectedImageUrl] = useState(null);
     
+    // --- THÊM STATE MỚI CHO CHẤM ĐỎ ---
+    const [hasPendingReports, setHasPendingReports] = useState(false);
+    
     const navigation = useNavigation();
 
+    // --- LOGIC LẤY VÀ XỬ LÝ DỮ LIỆU (GIỮ NGUYÊN) ---
     const fetchReports = useCallback(async () => {
         if (!userRole) return;
         setLoading(true);
@@ -128,11 +133,32 @@ const StoreScreen = () => {
         }
     }, [user, userRole, statusFilter, selectedDate]);
 
+    // --- LOGIC MỚI: LẮNG NGHE BÁO CÁO CHỜ DUYỆT ---
+    useEffect(() => {
+        // Chỉ admin mới cần lắng nghe
+        if (userRole !== 'admin') {
+            setHasPendingReports(false); // Đảm bảo nhân viên không thấy chấm đỏ
+            return;
+        }
+
+        const q = query(collection(db, "reports"), where("status", "==", "pending"));
+        
+        // onSnapshot sẽ tự động chạy lại khi có thay đổi trong các báo cáo 'pending'
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setHasPendingReports(!snapshot.empty); // Nếu có document thì là true, ngược lại là false
+        });
+
+        // Hủy lắng nghe khi component bị unmount
+        return () => unsubscribe();
+    }, [userRole]); // Chạy lại khi vai trò người dùng thay đổi
+
+
     useFocusEffect(useCallback(() => {
         if (userRole) {
             fetchReports();
         }
     }, [userRole, fetchReports]));
+
 
     useEffect(() => {
         const processAndGroupReports = () => {
@@ -154,6 +180,7 @@ const StoreScreen = () => {
         processAndGroupReports();
     }, [rawReports]);
 
+    // --- CÁC HÀM XỬ LÝ SỰ KIỆN (GIỮ NGUYÊN) ---
     const onRefresh = () => { setRefreshing(true); fetchReports(); };
     const onDayPress = (day) => {
         const newDate = new Date(day.timestamp);
@@ -164,7 +191,6 @@ const StoreScreen = () => {
     const clearDateFilter = () => setSelectedDate(null);
     const openImagePreview = (url) => { setSelectedImageUrl(url); setImageModalVisible(true); };
     const closeImagePreview = () => { setImageModalVisible(false); setSelectedImageUrl(null); };
-
     const handleUpdateStatus = async (reportId, newStatus) => {
         Alert.alert(`Xác nhận`, `Bạn có chắc muốn ${newStatus === 'approved' ? 'duyệt' : 'từ chối'} báo cáo này?`, [
             { text: "Hủy" },
@@ -176,7 +202,6 @@ const StoreScreen = () => {
             }, style: newStatus === 'rejected' ? 'destructive' : 'default' }
         ]);
     };
-
     const handleDelete = (reportId) => {
         Alert.alert("Xác nhận xóa", "Bạn có chắc muốn xóa báo cáo này vĩnh viễn?", [
             { text: "Hủy" },
@@ -190,6 +215,7 @@ const StoreScreen = () => {
     };
     const handleEdit = (item) => navigation.navigate('EditReport', { reportId: item.id });
 
+    // --- CÁC HÀM RENDER (GIỮ NGUYÊN) ---
     const renderItem = ({ item }) => {
         const statusText = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' };
         const statusColor = { pending: COLORS.pending, approved: COLORS.approved, rejected: COLORS.rejected };
@@ -244,7 +270,6 @@ const StoreScreen = () => {
 
     return (
         <View style={styles.container}>
-            {/* --- HEADER MỚI ĐƯỢC THÊM TRỰC TIẾP VÀO ĐÂY --- */}
             <View style={styles.header}>
                 <View style={{ width: 100 }} />
                 <HeaderLogo />
@@ -258,12 +283,18 @@ const StoreScreen = () => {
                 <View style={styles.filterBar}>
                     <View style={styles.filterSegment}>
                         <TouchableOpacity onPress={() => setStatusFilter('all')} style={[styles.segmentButton, statusFilter === 'all' && styles.segmentButtonActive]}><Text style={[styles.segmentText, statusFilter === 'all' && styles.segmentTextActive]}>Tất cả</Text></TouchableOpacity>
-                        <TouchableOpacity onPress={() => setStatusFilter('pending')} style={[styles.segmentButton, statusFilter === 'pending' && styles.segmentButtonActive]}><Text style={[styles.segmentText, statusFilter === 'pending' && styles.segmentTextActive]}>Chờ duyệt</Text></TouchableOpacity>
+                        <TouchableOpacity onPress={() => setStatusFilter('pending')} style={[styles.segmentButton, statusFilter === 'pending' && styles.segmentButtonActive]}>
+                            {/* --- CẬP NHẬT GIAO DIỆN NÚT BẤM --- */}
+                            <View style={styles.filterButtonContent}>
+                                <Text style={[styles.segmentText, statusFilter === 'pending' && styles.segmentTextActive]}>Chờ duyệt</Text>
+                                {hasPendingReports && <View style={styles.notificationDot} />}
+                            </View>
+                        </TouchableOpacity>
                     </View>
                     <TouchableOpacity style={styles.datePickerButton} onPress={() => setDatePickerVisible(true)}>
                         <Ionicons name="calendar-outline" size={20} color={COLORS.gray} />
                         <Text style={styles.datePickerText}>{getFormattedDate(selectedDate) || 'Tất cả ngày'}</Text>
-                        {selectedDate && <TouchableOpacity onPress={() => setSelectedDate(null)} style={styles.clearDateButton}><Ionicons name="close-circle" size={20} color={COLORS.gray} /></TouchableOpacity>}
+                        {selectedDate && <TouchableOpacity onPress={clearDateFilter} style={styles.clearDateButton}><Ionicons name="close-circle" size={20} color={COLORS.gray} /></TouchableOpacity>}
                     </TouchableOpacity>
                 </View>
             )}
@@ -276,14 +307,14 @@ const StoreScreen = () => {
                 </TouchableWithoutFeedback>
             </Modal>
             
-            {loading ? <ActivityIndicator size="large" style={{ flex: 1 }} /> : (
+            {loading ? <ActivityIndicator size="large" style={{ flex: 1, color: COLORS.black }} /> : (
                  <SectionList
                     sections={sections}
                     keyExtractor={(item, index) => item.id + index}
                     renderItem={renderItem}
                     renderSectionHeader={renderSectionHeader}
                     contentContainerStyle={styles.listContainer}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.black]} tintColor={COLORS.black} />}
                     ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>Không có báo cáo nào.</Text></View>}
                     stickySectionHeadersEnabled={true}
                 />
@@ -313,39 +344,18 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: COLORS.lightGray,
     },
-    headerLogo: {
-        width: 100,
-        height: 40,
-    },
-    headerRightContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        width: 100,
-        justifyContent: 'flex-end',
-    },
-    headerButton: {
-        width: 45, 
-        height: 45, 
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    notificationBadge: {
-        position: 'absolute',
-        top: 10,
-        right: 10,
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: 'red',
-        borderWidth: 1.5,
-        borderColor: COLORS.white,
-    },
+    headerLogo: { width: 100, height: 40, },
+    headerRightContainer: { flexDirection: 'row', alignItems: 'center', width: 100, justifyContent: 'flex-end', },
+    headerButton: { width: 45, height: 45, justifyContent: 'center', alignItems: 'center', },
+    notificationBadge: { position: 'absolute', top: 10, right: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: 'red', borderWidth: 1.5, borderColor: COLORS.white, },
     filterBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, backgroundColor: COLORS.lightGray, borderBottomWidth: 1, borderBottomColor: '#e0e0e0',},
     filterSegment: { flexDirection: 'row', backgroundColor: '#e0e0e0', borderRadius: 8, },
     segmentButton: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, },
     segmentButtonActive: { backgroundColor: COLORS.black, },
     segmentText: { color: COLORS.black, fontWeight: '600' },
     segmentTextActive: { color: COLORS.white },
+    filterButtonContent: { flexDirection: 'row', alignItems: 'center' },
+    notificationDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.rejected, marginLeft: 6 },
     datePickerButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: '#ddd',},
     datePickerText: { marginLeft: 8, color: COLORS.black, fontWeight: '500', fontSize: 15 },
     clearDateButton: { marginLeft: 10, },
@@ -357,17 +367,17 @@ const styles = StyleSheet.create({
     sectionRevenueText: { fontWeight: '600', color: COLORS.gray },
     itemContainer: { flexDirection: 'row', backgroundColor: COLORS.white, padding: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
     itemImage: { width: 100, height: 100, borderRadius: 10 },
-    itemContent: { flex: 1, marginLeft: 12, justifyContent: 'space-between' },
-    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+    itemContent: { flex: 1, marginLeft: 12, justifyContent: 'flex-start' },
+    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 },
     serviceText: { fontSize: 16, fontWeight: 'bold', color: COLORS.black, flex: 1, marginRight: 5 },
-    priceText: { fontSize: 15, fontWeight: '600', color: COLORS.black, marginVertical: 4 },
-    infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    priceText: { fontSize: 15, fontWeight: '600', color: COLORS.primary, marginBottom: 8 },
+    infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
     infoText: { marginLeft: 8, fontSize: 13, color: COLORS.gray, flexShrink: 1 },
     statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
     statusBadgeText: { color: COLORS.white, fontSize: 11, fontWeight: 'bold' },
     menuTrigger: { padding: 5, },
     adminActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 10, marginTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-    actionButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginLeft: 10 },
+    actionButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginRight: 10 },
     actionButtonText: { color: 'white', fontWeight: 'bold', marginLeft: 5, fontSize: 13 },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50, },
     emptyText: { textAlign: 'center', color: COLORS.gray, fontSize: 16 },
