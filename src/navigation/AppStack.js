@@ -44,7 +44,7 @@ function MainTabs() {
         <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
-                tabBarShowLabel: false,
+                tabBarShowLabel: true,
                 tabBarStyle: ((route) => {
                     const routeName = getFocusedRouteNameFromRoute(route) ?? '';
                     if (['CreateReport', 'EditReport', 'EmployeeStatistics', 'Notification'].includes(routeName)) {
@@ -57,7 +57,7 @@ function MainTabs() {
             })}
         >
             <Tab.Screen 
-                name="Store" 
+                name="Trang chủ" 
                 component={StoreScreen} 
                 options={{ 
                     tabBarIcon: ({ color, size }) => (<Ionicons name="home-outline" color={color} size={size} />),
@@ -68,6 +68,7 @@ function MainTabs() {
                 // --- SỬA LỖI Ở ĐÂY ---
                 component={EmptyComponent} // <-- Sử dụng component đã được định nghĩa
                 options={{
+                    tabBarLabel: () => null,
                     tabBarButton: (props) => (
                         <CustomTabBarButton {...props} onPress={() => navigation.navigate('CreateReport')} />
                     ),
@@ -75,7 +76,7 @@ function MainTabs() {
                 }}
             />
             <Tab.Screen 
-                name="Statistics" 
+                name="Thống kê" 
                 component={StatisticsScreen} 
                 options={{ 
                     tabBarIcon: ({ color, size }) => (<Ionicons name="stats-chart-outline" color={color} size={size} />),
