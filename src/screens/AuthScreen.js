@@ -3,7 +3,7 @@
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
-    updateProfile, // <-- 1. IMPORT THÊM updateProfile
+    updateProfile,
 } from 'firebase/auth';
 import { useState } from 'react';
 import {
@@ -14,20 +14,20 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    ScrollView, // Thêm ScrollView để tránh lỗi tràn màn hình
+    ScrollView,
 } from 'react-native';
-import { auth } from '../../firebaseConfig';
+import { auth, db } from '../../firebaseConfig'; // <-- Import 'db'
+import { doc, setDoc } from 'firebase/firestore'; // <-- Import 'doc' và 'setDoc'
 
 const AuthScreen = () => {
     const [password, setPassword] = useState('');
     const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
     const [phoneNumber, setPhoneNumber] = useState('');
-    const [employeeName, setEmployeeName] = useState(''); // <-- 2. THÊM STATE CHO TÊN NHÂN VIÊN
+    const [employeeName, setEmployeeName] = useState('');
 
     // Hàm xử lý đăng ký tài khoản (đã cập nhật)
     const handleSignUp = async () => {
-        // --- 3. KIỂM TRA TÊN NHÂN VIÊN KHI ĐĂNG KÝ ---
         if (!employeeName.trim()) {
             Alert.alert('Lỗi', 'Vui lòng nhập tên nhân viên.');
             return;
@@ -46,22 +46,31 @@ const AuthScreen = () => {
         const emailForFirebase = `${phoneNumber}@suhii.app`;
         setLoading(true);
         try {
-            // Tạo tài khoản mới
+            // Tạo tài khoản mới trong Firebase Authentication
             const userCredential = await createUserWithEmailAndPassword(auth, emailForFirebase, password);
+            const user = userCredential.user;
 
-            // --- 4. CẬP NHẬT TÊN NHÂN VIÊN VÀO PROFILE ---
-            if (userCredential.user) {
-                await updateProfile(userCredential.user, {
+            if (user) {
+                // Cập nhật tên hiển thị (displayName) cho tài khoản Auth
+                await updateProfile(user, {
                     displayName: employeeName.trim(),
                 });
-            }
 
-            Alert.alert('Thành công', 'Đăng ký tài khoản thành công!');
-            // Reset các trường
-            setPassword('');
-            setPhoneNumber('');
-            setEmployeeName('');
-            setIsSignUp(false);
+                // Tạo một bản ghi người dùng mới trong Firestore collection 'users'
+                await setDoc(doc(db, 'users', user.uid), {
+                    displayName: employeeName.trim(),
+                    email: user.email, // Lưu email được tạo từ số điện thoại
+                    role: 'employee', // Mặc định tất cả các tài khoản đăng ký là 'employee'
+                    createdAt: new Date(), // Thêm thời gian tạo để tiện theo dõi
+                });
+
+                Alert.alert('Thành công', 'Đăng ký tài khoản thành công!');
+                // Reset các trường
+                setPassword('');
+                setPhoneNumber('');
+                setEmployeeName('');
+                setIsSignUp(false);
+            }
         } catch (error) {
             let errorMessage = 'Đăng ký thất bại. Vui lòng thử lại.';
             if (error.code === 'auth/email-already-in-use') {
@@ -118,14 +127,13 @@ const AuthScreen = () => {
                 {isSignUp ? 'Đăng ký tài khoản' : 'Đăng nhập'}
             </Text>
 
-            {/* --- 5. HIỂN THỊ CÓ ĐIỀU KIỆN TRƯỜNG NHẬP TÊN --- */}
             {isSignUp && (
                 <TextInput
                     style={styles.input}
                     placeholder="Tên nhân viên"
                     value={employeeName}
                     onChangeText={setEmployeeName}
-                    autoCapitalize="words" // Tự động viết hoa chữ cái đầu
+                    autoCapitalize="words"
                 />
             )}
 
@@ -174,7 +182,7 @@ const AuthScreen = () => {
 
 const styles = StyleSheet.create({
     container: {
-        flexGrow: 1, // Dùng flexGrow thay cho flex để ScrollView hoạt động
+        flexGrow: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,

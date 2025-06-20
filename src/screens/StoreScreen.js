@@ -7,18 +7,80 @@ import { Ionicons } from '@expo/vector-icons';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useAuth } from '../context/AuthContext';
-import { SwipeListView } from 'react-native-swipe-list-view';
+import { SwipeListView, SwipeRow } from 'react-native-swipe-list-view';
 
-LocaleConfig.locales['vi'] = { monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], monthNamesShort: ['Th.1','Th.2','Th.3','Th.4','Th.5','Th.6','Th.7','Th.8','Th.9','Th.10','Th.11','Th.12'], dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'], dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'], today: 'Hôm nay' };
+LocaleConfig.locales['vi'] = { 
+    monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], 
+    monthNamesShort: ['Th.1','Th.2','Th.3','Th.4','Th.5','Th.6','Th.7','Th.8','Th.9','Th.10','Th.11','Th.12'], 
+    dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'], 
+    dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'], 
+    today: 'Hôm nay' 
+};
 LocaleConfig.defaultLocale = 'vi';
 
-const COLORS = { black: '#121212', white: '#FFFFFF', gray: '#888888', lightGray: '#F5F5F5', primary: '#007bff', pending: '#f39c12', approved: '#28a745', rejected: '#D32F2F', overtime: '#6a0dad' };
-const getFormattedDate = (date) => { if (!date) return null; const today = new Date(); today.setHours(0,0,0,0); const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1); if (date.getTime() === today.getTime()) return 'Hôm nay'; if (date.getTime() === yesterday.getTime()) return 'Hôm qua'; const day = String(date.getDate()).padStart(2, '0'); const month = String(date.getMonth() + 1).padStart(2, '0'); const year = date.getFullYear(); return `${day}/${month}/${year}`; };
-const toYYYYMMDD = (date) => { if (!date) return ''; const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; };
+const COLORS = { 
+    black: '#121212', 
+    white: '#FFFFFF', 
+    gray: '#888888', 
+    lightGray: '#F5F5F5', 
+    primary: '#007bff', 
+    pending: '#f39c12', 
+    approved: '#28a745', 
+    rejected: '#D32F2F', 
+    overtime: '#6a0dad' 
+};
 
-const HeaderLogo = () => (<Image source={require('../../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />);
-const HeaderLogoutButton = () => { const handleSignOut = () => { Alert.alert("Xác nhận Đăng xuất", "Bạn có chắc muốn đăng xuất?", [{ text: "Hủy" }, { text: "Đăng xuất", onPress: () => auth.signOut(), style: "destructive" }]); }; return (<TouchableOpacity onPress={handleSignOut} style={styles.headerButton}><Ionicons name="log-out-outline" size={28} color={COLORS.black} /></TouchableOpacity>); };
+const getFormattedDate = (date) => { 
+    if (!date) return null; 
+    const today = new Date(); 
+    today.setHours(0,0,0,0); 
+    const yesterday = new Date(today); 
+    yesterday.setDate(yesterday.getDate() - 1); 
+    if (date.getTime() === today.getTime()) return 'Hôm nay'; 
+    if (date.getTime() === yesterday.getTime()) return 'Hôm qua'; 
+    const day = String(date.getDate()).padStart(2, '0'); 
+    const month = String(date.getMonth() + 1).padStart(2, '0'); 
+    const year = date.getFullYear(); 
+    return `${day}/${month}/${year}`; 
+};
 
+const toYYYYMMDD = (date) => { 
+    if (!date) return ''; 
+    const year = date.getFullYear(); 
+    const month = String(date.getMonth() + 1).padStart(2, '0'); 
+    const day = String(date.getDate()).padStart(2, '0'); 
+    return `${year}-${month}-${day}`; 
+};
+
+const HeaderLogo = () => (
+    <Image 
+        source={require('../../assets/logo.png')} 
+        style={styles.headerLogo} 
+        resizeMode="contain" 
+    />
+);
+
+const HeaderLogoutButton = () => { 
+    const handleSignOut = () => { 
+        Alert.alert(
+            "Xác nhận Đăng xuất", 
+            "Bạn có chắc muốn đăng xuất?", 
+            [
+                { text: "Hủy" }, 
+                { 
+                    text: "Đăng xuất", 
+                    onPress: () => auth.signOut(), 
+                    style: "destructive" 
+                }
+            ]
+        ); 
+    }; 
+    return (
+        <TouchableOpacity onPress={handleSignOut} style={styles.headerButton}>
+            <Ionicons name="log-out-outline" size={28} color={COLORS.black} />
+        </TouchableOpacity>
+    ); 
+};
 
 const StoreScreen = () => {
     const { user, userRole, initializing } = useAuth();
@@ -34,77 +96,463 @@ const StoreScreen = () => {
     const navigation = useNavigation();
 
     const fetchReports = useCallback(async () => {
-        if (!userRole) return; setLoading(true); try { const reportsRef = collection(db, 'reports'); let queries = [orderBy('createdAt', 'desc')]; if (userRole === 'employee' && user) { queries.push(where('participantIds', 'array-contains', user.uid)); } else if (userRole === 'admin' && statusFilter !== 'all') { queries.push(where('status', '==', statusFilter)); } if (selectedDate) { const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0); const endOfDay = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999); queries.push(where('createdAt', '>=', startOfDay), where('createdAt', '<=', endOfDay)); } const q = query(reportsRef, ...queries); const snapshots = await getDocs(q); setRawReports(snapshots.docs.map(d => ({ key: d.id, ...d.data() }))); } catch (error) { console.error("Lỗi khi tải báo cáo:", error); if (error.code === 'failed-precondition') { Alert.alert("Lỗi Cấu Hình", "Cơ sở dữ liệu của bạn thiếu chỉ mục cần thiết."); } } finally { setLoading(false); }
+        if (!userRole) return; 
+        setLoading(true); 
+        try { 
+            const reportsRef = collection(db, 'reports'); 
+            let queries = [orderBy('createdAt', 'desc')]; 
+            if (userRole === 'employee' && user) { 
+                queries.push(where('participantIds', 'array-contains', user.uid)); 
+            } else if (userRole === 'admin' && statusFilter !== 'all') { 
+                queries.push(where('status', '==', statusFilter)); 
+            } 
+            if (selectedDate) { 
+                const startOfDay = new Date(selectedDate); 
+                startOfDay.setHours(0, 0, 0, 0); 
+                const endOfDay = new Date(selectedDate); 
+                endOfDay.setHours(23, 59, 59, 999); 
+                queries.push(where('createdAt', '>=', startOfDay), where('createdAt', '<=', endOfDay)); 
+            } 
+            const q = query(reportsRef, ...queries); 
+            const snapshots = await getDocs(q); 
+            setRawReports(snapshots.docs.map(d => ({ key: d.id, ...d.data() }))); 
+        } catch (error) { 
+            console.error("Lỗi khi tải báo cáo:", error); 
+            if (error.code === 'failed-precondition') { 
+                Alert.alert("Lỗi Cấu Hình", "Cơ sở dữ liệu của bạn thiếu chỉ mục cần thiết."); 
+            } 
+        } finally { 
+            setLoading(false); 
+        }
     }, [user, userRole, statusFilter, selectedDate]);
     
-    useEffect(() => { if (userRole !== 'admin') return; const q = query(collection(db, "reports"), where("status", "==", "pending")); const unsubscribe = onSnapshot(q, (snapshot) => { setHasPendingReports(!snapshot.empty); }); return () => unsubscribe(); }, [userRole]);
-    useFocusEffect(useCallback(() => { if (userRole) fetchReports(); }, [userRole, fetchReports]));
-    useEffect(() => { const grouped = rawReports.reduce((acc, report) => { if (report.createdAt?.toDate) { const groupKey = report.createdAt.toDate().toDateString(); if (!acc[groupKey]) acc[groupKey] = { title: getFormattedDate(report.createdAt.toDate()), data: [] }; acc[groupKey].data.push(report); } return acc; }, {}); const sortedSections = Object.entries(grouped).map(([key, value]) => ({ title: value.title, rawDate: new Date(key), data: value.data, })).sort((a, b) => b.rawDate - a.rawDate); setSections(sortedSections); }, [rawReports]);
+    useEffect(() => { 
+        if (userRole !== 'admin') return; 
+        const q = query(collection(db, "reports"), where("status", "==", "pending")); 
+        const unsubscribe = onSnapshot(q, (snapshot) => { 
+            setHasPendingReports(!snapshot.empty); 
+        }); 
+        return () => unsubscribe(); 
+    }, [userRole]);
+
+    useFocusEffect(useCallback(() => { 
+        if (userRole) fetchReports(); 
+    }, [userRole, fetchReports]));
+
+    useEffect(() => { 
+        const grouped = rawReports.reduce((acc, report) => { 
+            if (report.createdAt?.toDate) { 
+                const groupKey = report.createdAt.toDate().toDateString(); 
+                if (!acc[groupKey]) acc[groupKey] = { 
+                    title: getFormattedDate(report.createdAt.toDate()), 
+                    data: [] 
+                }; 
+                acc[groupKey].data.push(report); 
+            } 
+            return acc; 
+        }, {}); 
+        const sortedSections = Object.entries(grouped).map(([key, value]) => ({ 
+            title: value.title, 
+            rawDate: new Date(key), 
+            data: value.data, 
+        })).sort((a, b) => b.rawDate - a.rawDate); 
+        setSections(sortedSections); 
+    }, [rawReports]);
     
-    const handleUpdateStatus = async (reportId, newStatus) => { Alert.alert(`Xác nhận`, `Bạn có chắc muốn ${newStatus === 'approved' ? 'duyệt' : 'từ chối'} báo cáo này?`, [{ text: "Hủy" }, { text: "Đồng ý", onPress: async () => { try { await updateDoc(doc(db, 'reports', reportId), { status: newStatus }); fetchReports(); } catch (error) { Alert.alert("Lỗi", "Không thể cập nhật."); } }, style: newStatus === 'rejected' ? 'destructive' : 'default' }]); };
-    const handleBulkUpdate = async (newStatus) => { const pendingReports = rawReports.filter(r => r.status === 'pending'); if (pendingReports.length === 0) { Alert.alert("Thông báo", "Không có báo cáo nào đang ở trạng thái 'Chờ duyệt'."); return; } const actionText = newStatus === 'approved' ? 'duyệt' : 'từ chối'; const reportCount = pendingReports.length; Alert.alert( `Xác nhận ${actionText} tất cả`, `Bạn có chắc muốn ${actionText} ${reportCount} báo cáo đang chờ?`, [ { text: "Hủy", style: "cancel" }, { text: `Đồng ý (${reportCount})`, onPress: async () => { setLoading(true); const batch = writeBatch(db); pendingReports.forEach(report => { const reportRef = doc(db, 'reports', report.key); batch.update(reportRef, { status: newStatus }); }); try { await batch.commit(); Alert.alert("Thành công", `Đã ${actionText} thành công ${reportCount} báo cáo.`); } catch (error) { console.error("Lỗi khi cập nhật hàng loạt: ", error); Alert.alert("Lỗi", "Không thể cập nhật tất cả báo cáo."); } finally { fetchReports(); } }, style: newStatus === 'rejected' ? 'destructive' : 'default' } ] ); };
-    const handleDelete = (reportId) => { Alert.alert("Xác nhận xóa", "Bạn có chắc muốn xóa báo cáo này vĩnh viễn?", [{ text: "Hủy" }, { text: "Xóa", onPress: async () => { try { await deleteDoc(doc(db, 'reports', reportId)); fetchReports(); } catch (error) { Alert.alert("Lỗi", "Không thể xóa báo cáo."); } }, style: 'destructive' }]); };
+    const handleUpdateStatus = async (reportId, newStatus) => { 
+        Alert.alert(
+            'Xác nhận', 
+            `Bạn có chắc muốn ${newStatus === 'approved' ? 'duyệt' : 'từ chối'} báo cáo này?`, 
+            [
+                { text: "Hủy" }, 
+                { 
+                    text: "Đồng ý", 
+                    onPress: async () => { 
+                        try { 
+                            await updateDoc(doc(db, 'reports', reportId), { status: newStatus }); 
+                            fetchReports(); 
+                        } catch (error) { 
+                            Alert.alert("Lỗi", "Không thể cập nhật."); 
+                        } 
+                    }, 
+                    style: newStatus === 'rejected' ? 'destructive' : 'default' 
+                }
+            ]
+        ); 
+    };
+
+    const handleBulkUpdate = async (newStatus) => { 
+        const pendingReports = rawReports.filter(r => r.status === 'pending'); 
+        if (pendingReports.length === 0) { 
+            Alert.alert("Thông báo", "Không có báo cáo nào đang ở trạng thái 'Chờ duyệt'."); 
+            return; 
+        } 
+        const actionText = newStatus === 'approved' ? 'duyệt' : 'từ chối'; 
+        const reportCount = pendingReports.length; 
+        Alert.alert( 
+            `Xác nhận ${actionText} tất cả`, 
+            `Bạn có chắc muốn ${actionText} ${reportCount} báo cáo đang chờ?`, 
+            [ 
+                { text: "Hủy", style: "cancel" }, 
+                { 
+                    text: `Đồng ý (${reportCount})`, 
+                    onPress: async () => { 
+                        setLoading(true); 
+                        const batch = writeBatch(db); 
+                        pendingReports.forEach(report => { 
+                            const reportRef = doc(db, 'reports', report.key); 
+                            batch.update(reportRef, { status: newStatus }); 
+                        }); 
+                        try { 
+                            await batch.commit(); 
+                            Alert.alert("Thành công", `Đã ${actionText} thành công ${reportCount} báo cáo.`); 
+                        } catch (error) { 
+                            console.error("Lỗi khi cập nhật hàng loạt: ", error); 
+                            Alert.alert("Lỗi", "Không thể cập nhật tất cả báo cáo."); 
+                        } finally { 
+                            fetchReports(); 
+                        } 
+                    }, 
+                    style: newStatus === 'rejected' ? 'destructive' : 'default' 
+                } 
+            ] 
+        ); 
+    };
+
+    const handleDelete = (reportId) => { 
+        Alert.alert(
+            "Xác nhận xóa", 
+            "Bạn có chắc muốn xóa báo cáo này vĩnh viễn?", 
+            [
+                { text: "Hủy" }, 
+                { 
+                    text: "Xóa", 
+                    onPress: async () => { 
+                        try { 
+                            await deleteDoc(doc(db, 'reports', reportId)); 
+                            fetchReports(); 
+                        } catch (error) { 
+                            Alert.alert("Lỗi", "Không thể xóa báo cáo."); 
+                        } 
+                    }, 
+                    style: 'destructive' 
+                }
+            ]
+        ); 
+    };
+
     const handleEdit = (item) => navigation.navigate('EditReport', { reportId: item.key });
-    const onDayPress = (day) => { const newDate = new Date(day.dateString); setSelectedDate(newDate); setDatePickerVisible(false); };
+    
+    const onDayPress = (day) => { 
+        const newDate = new Date(day.dateString); 
+        setSelectedDate(newDate); 
+        setDatePickerVisible(false); 
+    };
+    
     const clearDateFilter = () => setSelectedDate(null);
-    const openImagePreview = (url) => { setSelectedImageUrl(url); setImageModalVisible(true); };
-    const closeImagePreview = () => { setImageModalVisible(false); setSelectedImageUrl(null); };
+    
+    const openImagePreview = (url) => { 
+        setSelectedImageUrl(url); 
+        setImageModalVisible(true); 
+    };
+    
+    const closeImagePreview = () => { 
+        setImageModalVisible(false); 
+        setSelectedImageUrl(null); 
+    };
 
     const renderItem = ({ item }) => {
-        const statusMap = { approved: { icon: 'checkmark-circle', color: COLORS.approved }, pending: { icon: 'time-outline', color: COLORS.pending }, rejected: { icon: 'close-circle', color: COLORS.rejected } };
+        const statusMap = { 
+            approved: { icon: 'checkmark-circle', color: COLORS.approved }, 
+            pending: { icon: 'time-outline', color: COLORS.pending }, 
+            rejected: { icon: 'close-circle', color: COLORS.rejected } 
+        };
         const statusInfo = statusMap[item.status] || { icon: 'help-circle', color: COLORS.gray };
-        const canEmployeeModify = userRole === 'employee' && item.userId === user?.uid && item.status === 'pending';
+        
+        // Logic cho phép chỉnh sửa: Admin chỉ sửa báo cáo pending. Nhân viên chỉ sửa báo cáo của mình và pending.
+        const canEdit = userRole === 'admin' ? item.status === 'pending' : (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
+        // Logic cho phép xóa: Admin có thể xóa bất kỳ báo cáo nào. Nhân viên chỉ xóa báo cáo của mình và pending.
+        const canDelete = userRole === 'admin' || (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
 
         return (
-            <View style={styles.itemContainer}>
-                <TouchableOpacity onPress={() => item.imageUrl && openImagePreview(item.imageUrl)}>
-                    <Image source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/default-image.png')} style={styles.itemImage} />
-                    {/* --- SỬA: DI CHUYỂN ICON TRẠNG THÁI --- */}
-                    <View style={styles.statusIconOnImage}>
-                         <Ionicons name={statusInfo.icon} size={26} color={statusInfo.color} />
-                    </View>
-                </TouchableOpacity>
-                <View style={styles.itemContent}>
-                    <View style={styles.itemHeader}><Text style={styles.serviceText} numberOfLines={2}>{item.service || ''}</Text>{canEmployeeModify && (<Menu><MenuTrigger style={styles.menuTrigger}><Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} /></MenuTrigger><MenuOptions customStyles={menuOptionsStyles}><MenuOption onSelect={() => handleEdit(item)} text='Chỉnh sửa' /><View style={styles.divider} /><MenuOption onSelect={() => handleDelete(item.key)}><Text style={{ color: 'red' }}>Xóa</Text></MenuOption></MenuOptions></Menu>)}</View>
-                    <View style={styles.priceContainer}>
-                        <Text style={styles.priceText}>{(item.price || 0).toLocaleString('vi-VN')} VNĐ</Text>
-                        {/* --- THÊM TEXT LÀM NGOÀI GIỜ --- */}
-                        {item.isOvertime && <Text style={styles.overtimeText}>(+30%)</Text>}
-                    </View>
-                    <View style={styles.infoRow}><Ionicons name="people-outline" size={16} color={COLORS.gray} /><Text style={styles.infoText}>{item.employeeName}{item.partnerName && ` & ${item.partnerName}`}</Text></View>
-                    {item.note ? <View style={styles.infoRow}><Ionicons name="document-text-outline" size={16} color={COLORS.gray} /><Text style={styles.infoText} numberOfLines={1}>{item.note}</Text></View> : null}
-                    {userRole === 'admin' && item.status === 'pending' && (<View style={styles.adminActions}><TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => handleUpdateStatus(item.key, 'rejected')}><Ionicons name="close" size={18} color={COLORS.white} /><Text style={styles.actionButtonText}>Từ chối</Text></TouchableOpacity><TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => handleUpdateStatus(item.key, 'approved')}><Ionicons name="checkmark" size={18} color={COLORS.white} /><Text style={styles.actionButtonText}>Duyệt</Text></TouchableOpacity></View>)}
+            <SwipeRow 
+                rightOpenValue={-85} 
+                disableRightSwipe={!canDelete}
+                key={item.key}
+            >
+                {/* Hidden Item */}
+                <View style={styles.rowBack}>
+                    <TouchableOpacity 
+                        style={styles.backRightBtn} 
+                        onPress={() => handleDelete(item.key)}
+                        disabled={!canDelete}
+                    >
+                        <Ionicons name="trash-outline" size={28} color={COLORS.white} />
+                        <Text style={styles.backTextWhite}>Xóa</Text>
+                    </TouchableOpacity>
                 </View>
+
+                {/* Visible Item */}
+                <TouchableWithoutFeedback
+                    onPress={() => {
+                        if (canEdit) {
+                            handleEdit(item);
+                        } else if (item.imageUrl) {
+                            openImagePreview(item.imageUrl);
+                        }
+                    }}
+                    disabled={!canEdit && !item.imageUrl}
+                >
+                    <View style={styles.itemContainer}>
+                        <View> 
+                            <Image 
+                                source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/default-image.png')} 
+                                style={styles.itemImage} 
+                            />
+                            <View style={styles.statusIconOnImage}>
+                                <Ionicons name={statusInfo.icon} size={26} color={statusInfo.color} />
+                            </View>
+                        </View>
+                        <View style={styles.itemContent}>
+                            <View style={styles.itemHeader}>
+                                <Text style={styles.serviceText} numberOfLines={2}>
+                                    {item.service || ''}
+                                </Text>
+                                {(userRole === 'employee' && (canEdit || canDelete)) && ( 
+                                    <Menu>
+                                        <MenuTrigger style={styles.menuTrigger}>
+                                            <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
+                                        </MenuTrigger>
+                                        <MenuOptions customStyles={menuOptionsStyles}>
+                                            {canEdit && (
+                                                <MenuOption onSelect={() => handleEdit(item)}>
+                                                    <Text>Chỉnh sửa</Text>
+                                                </MenuOption>
+                                            )}
+                                            {canEdit && canDelete && userRole === 'employee' && (
+                                                <View style={styles.divider} />
+                                            )}
+                                            {canDelete && userRole === 'employee' && (
+                                                <MenuOption onSelect={() => handleDelete(item.key)}>
+                                                    <Text style={{ color: 'red' }}>Xóa</Text>
+                                                </MenuOption>
+                                            )}
+                                        </MenuOptions>
+                                    </Menu>
+                                )}
+                            </View>
+                            <View style={styles.priceContainer}>
+                                <Text style={styles.priceText}>
+                                    {(item.price || 0).toLocaleString('vi-VN')} VNĐ
+                                </Text>
+                                {item.isOvertime && (
+                                    <Text style={styles.overtimeText}>(+30%)</Text>
+                                )}
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Ionicons name="people-outline" size={16} color={COLORS.gray} />
+                                <Text style={styles.infoText}>
+                                    {item.employeeName}{item.partnerName && ` & ${item.partnerName}`}
+                                </Text>
+                            </View>
+                            {item.note ? (
+                                <View style={styles.infoRow}>
+                                    <Ionicons name="document-text-outline" size={16} color={COLORS.gray} />
+                                    <Text style={styles.infoText} numberOfLines={1}>
+                                        {item.note}
+                                    </Text>
+                                </View>
+                            ) : null}
+                            {userRole === 'admin' && item.status === 'pending' && (
+                                <View style={styles.adminActions}>
+                                    <TouchableOpacity 
+                                        style={[styles.actionButton, styles.rejectButton]} 
+                                        onPress={() => handleUpdateStatus(item.key, 'rejected')}
+                                    >
+                                        <Ionicons name="close" size={18} color={COLORS.white} />
+                                        <Text style={styles.actionButtonText}>Từ chối</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        style={[styles.actionButton, styles.approveButton]} 
+                                        onPress={() => handleUpdateStatus(item.key, 'approved')}
+                                    >
+                                        <Ionicons name="checkmark" size={18} color={COLORS.white} />
+                                        <Text style={styles.actionButtonText}>Duyệt</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </SwipeRow>
+        );
+    };
+
+    const renderSectionHeader = ({ section }) => {
+        const totalSectionRevenue = section.data.reduce((sum, item) => (
+            item.status === 'approved' ? sum + (item.price || 0) : sum
+        ), 0);
+        return (
+            <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>{section.title}</Text>
+                <Text style={styles.sectionRevenueText}>
+                    Doanh thu: {totalSectionRevenue.toLocaleString('vi-VN')} VNĐ
+                </Text>
             </View>
         );
     };
 
-    const renderHiddenItem = (data) => {
-        if (userRole !== 'admin') return null; 
+    if (initializing) {
         return (
-            <View style={styles.rowBack}><TouchableOpacity style={styles.backRightBtn} onPress={() => handleDelete(data.item.key)}><Ionicons name="trash-outline" size={28} color={COLORS.white} /><Text style={styles.backTextWhite}>Xóa</Text></TouchableOpacity></View>
+            <View style={styles.fullScreenLoader}>
+                <ActivityIndicator size="large" color={COLORS.black} />
+            </View>
         );
-    };
-    const renderSectionHeader = ({ section }) => {
-        const totalSectionRevenue = section.data.reduce((sum, item) => (item.status === 'approved' ? sum + (item.price || 0) : sum), 0);
-        return (<View style={styles.sectionHeader}><Text style={styles.sectionHeaderText}>{section.title}</Text><Text style={styles.sectionRevenueText}>Doanh thu: {totalSectionRevenue.toLocaleString('vi-VN')} VNĐ</Text></View>);
-    };
+    }
 
-   if (initializing) {
-    return <View style={styles.fullScreenLoader}><ActivityIndicator size="large" color={COLORS.black} /></View>;
-}
     return (
         <View style={styles.container}>
-            <View style={styles.header}><View style={{ width: 100 }} /><HeaderLogo /><View style={styles.headerRightContainer}><HeaderLogoutButton /></View></View>
+            <View style={styles.header}>
+                <View style={{ width: 100 }} />
+                <HeaderLogo />
+                <View style={styles.headerRightContainer}>
+                    <HeaderLogoutButton />
+                </View>
+            </View>
+            
             {userRole === 'admin' && (
-                <><View style={styles.filterBar}><View style={styles.filterSegment}><TouchableOpacity onPress={() => setStatusFilter('all')} style={[styles.segmentButton, statusFilter === 'all' && styles.segmentButtonActive]}><Text style={[styles.segmentText, statusFilter === 'all' && styles.segmentTextActive]}>Tất cả</Text></TouchableOpacity><TouchableOpacity onPress={() => setStatusFilter('pending')} style={[styles.segmentButton, statusFilter === 'pending' && styles.segmentButtonActive]}><View style={styles.filterButtonContent}><Text style={[styles.segmentText, statusFilter === 'pending' && styles.segmentTextActive]}>Chờ duyệt</Text>{hasPendingReports && <View style={styles.notificationDot} />}</View></TouchableOpacity></View><TouchableOpacity style={styles.datePickerButton} onPress={() => setDatePickerVisible(true)}><Ionicons name="calendar-outline" size={20} color={COLORS.gray} /><Text style={styles.datePickerText}>{getFormattedDate(selectedDate) || 'Tất cả ngày'}</Text>{selectedDate && <TouchableOpacity onPress={clearDateFilter} style={styles.clearDateButton}><Ionicons name="close-circle" size={20} color={COLORS.gray} /></TouchableOpacity>}</TouchableOpacity></View>
-                {statusFilter === 'pending' && rawReports.some(r => r.status === 'pending') && (<View style={styles.bulkActionContainer}><TouchableOpacity style={[styles.bulkActionButton, styles.bulkRejectButton]} onPress={() => handleBulkUpdate('rejected')}><Ionicons name="close-circle-outline" size={20} color={COLORS.white} /><Text style={styles.bulkActionButtonText}>Từ chối tất cả</Text></TouchableOpacity><TouchableOpacity style={[styles.bulkActionButton, styles.bulkApproveButton]} onPress={() => handleBulkUpdate('approved')}><Ionicons name="checkmark-done-circle-outline" size={20} color={COLORS.white} /><Text style={styles.bulkActionButtonText}>Duyệt tất cả</Text></TouchableOpacity></View>)}</>
+                <>
+                    <View style={styles.filterBar}>
+                        <View style={styles.filterSegment}>
+                            <TouchableOpacity 
+                                onPress={() => setStatusFilter('all')} 
+                                style={[styles.segmentButton, statusFilter === 'all' && styles.segmentButtonActive]}
+                            >
+                                <Text style={[styles.segmentText, statusFilter === 'all' && styles.segmentTextActive]}>
+                                    Tất cả
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                onPress={() => setStatusFilter('pending')} 
+                                style={[styles.segmentButton, statusFilter === 'pending' && styles.segmentButtonActive]}
+                            >
+                                <View style={styles.filterButtonContent}>
+                                    <Text style={[styles.segmentText, statusFilter === 'pending' && styles.segmentTextActive]}>
+                                        Chờ duyệt
+                                    </Text>
+                                    {hasPendingReports && <View style={styles.notificationDot} />}
+                                </View>
+                            </TouchableOpacity>
+                        </View>
+                        <TouchableOpacity 
+                            style={styles.datePickerButton} 
+                            onPress={() => setDatePickerVisible(true)}
+                        >
+                            <Ionicons name="calendar-outline" size={20} color={COLORS.gray} />
+                            <Text style={styles.datePickerText}>
+                                {getFormattedDate(selectedDate) || 'Tất cả ngày'}
+                            </Text>
+                            {selectedDate && (
+                                <TouchableOpacity onPress={clearDateFilter} style={styles.clearDateButton}>
+                                    <Ionicons name="close-circle" size={20} color={COLORS.gray} />
+                                </TouchableOpacity>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                    
+                    {statusFilter === 'pending' && rawReports.some(r => r.status === 'pending') && (
+                        <View style={styles.bulkActionContainer}>
+                            <TouchableOpacity 
+                                style={[styles.bulkActionButton, styles.bulkRejectButton]} 
+                                onPress={() => handleBulkUpdate('rejected')}
+                            >
+                                <Ionicons name="close-circle-outline" size={20} color={COLORS.white} />
+                                <Text style={styles.bulkActionButtonText}>Từ chối tất cả</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.bulkActionButton, styles.bulkApproveButton]} 
+                                onPress={() => handleBulkUpdate('approved')}
+                            >
+                                <Ionicons name="checkmark-done-circle-outline" size={20} color={COLORS.white} />
+                                <Text style={styles.bulkActionButtonText}>Duyệt tất cả</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </>
             )}
-            <Modal transparent={true} animationType="fade" visible={isDatePickerVisible} onRequestClose={() => setDatePickerVisible(false)}><TouchableWithoutFeedback onPress={() => setDatePickerVisible(false)}><View style={styles.datePickerBackdrop}><TouchableWithoutFeedback><View style={styles.datePickerContent}><Calendar onDayPress={onDayPress} markedDates={{ [toYYYYMMDD(selectedDate)]: {selected: true, disableTouchEvent: true, selectedColor: COLORS.primary} }} /></View></TouchableWithoutFeedback></View></TouchableWithoutFeedback></Modal>
-            {loading ? <ActivityIndicator size="large" style={{ flex: 1, color: COLORS.black }} /> : (
-                 <SwipeListView useSectionList sections={sections} renderItem={renderItem} renderHiddenItem={renderHiddenItem} renderSectionHeader={renderSectionHeader} rightOpenValue={-85} disableRightSwipe={userRole !== 'admin'} keyExtractor={(item) => item.key} contentContainerStyle={styles.listContainer} refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchReports} colors={[COLORS.black]} tintColor={COLORS.black} />} ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>Không có báo cáo nào.</Text></View>} stickySectionHeadersEnabled />
+            
+            <Modal 
+                transparent={true} 
+                animationType="fade" 
+                visible={isDatePickerVisible} 
+                onRequestClose={() => setDatePickerVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setDatePickerVisible(false)}>
+                    <View style={styles.datePickerBackdrop}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.datePickerContent}>
+                                <Calendar 
+                                    onDayPress={onDayPress} 
+                                    markedDates={{ 
+                                        [toYYYYMMDD(selectedDate)]: {
+                                            selected: true, 
+                                            disableTouchEvent: true, 
+                                            selectedColor: COLORS.primary
+                                        } 
+                                    }} 
+                                />
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+            
+            {loading ? (
+                <ActivityIndicator size="large" style={{ flex: 1, color: COLORS.black }} />
+            ) : (
+                <SwipeListView
+                    useSectionList
+                    sections={sections}
+                    renderItem={renderItem}
+                    renderSectionHeader={renderSectionHeader}
+                    keyExtractor={(item) => item.key}
+                    contentContainerStyle={styles.listContainer}
+                    refreshControl={
+                        <RefreshControl 
+                            refreshing={loading} 
+                            onRefresh={fetchReports} 
+                            colors={[COLORS.black]} 
+                            tintColor={COLORS.black} 
+                        />
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Text style={styles.emptyText}>Không có báo cáo nào.</Text>
+                        </View>
+                    }
+                    stickySectionHeadersEnabled
+                />
             )}
-            <Modal visible={isImageModalVisible} transparent={true} onRequestClose={closeImagePreview}><View style={styles.modalContainer}><TouchableOpacity style={styles.modalCloseButton} onPress={closeImagePreview}><Ionicons name="close-circle" size={40} color="white" /></TouchableOpacity><Image source={{ uri: selectedImageUrl }} style={styles.fullscreenImage} resizeMode="contain" /></View></Modal>
+            
+            <Modal 
+                visible={isImageModalVisible} 
+                transparent={true} 
+                onRequestClose={closeImagePreview}
+            >
+                <View style={styles.modalContainer}>
+                    <TouchableOpacity 
+                        style={styles.modalCloseButton} 
+                        onPress={closeImagePreview}
+                    >
+                        <Ionicons name="close-circle" size={40} color="white" />
+                    </TouchableOpacity>
+                    <Image 
+                        source={{ uri: selectedImageUrl }} 
+                        style={styles.fullscreenImage} 
+                        resizeMode="contain" 
+                    />
+                </View>
+            </Modal>
         </View>
     );
 };
