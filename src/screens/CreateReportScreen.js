@@ -92,7 +92,8 @@ const CreateReportScreen = () => {
                 const usersRef = collection(db, 'users');
                 // Lấy tất cả user có role là 'employee' (giả định bạn muốn chỉ nhân viên)
                 // Nếu muốn lấy tất cả user trừ admin, bỏ where clause hoặc thêm 'admin' nếu có.
-                const q = query(usersRef, where('role', '==', 'employee')); // Lấy tất cả user là employee
+                // const q = query(usersRef, where('role', '==', 'employee')); // Lấy tất cả user là employee
+                const q = query(usersRef);
                 const querySnapshot = await getDocs(q);
 
                 const userList = [];

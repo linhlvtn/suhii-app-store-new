@@ -135,7 +135,8 @@ const EditReportScreen = () => {
 
                 // Fetch Users Data for partner picker
                 const usersRef = collection(db, 'users');
-                const q = query(usersRef, where('role', '==', 'employee'));
+                // const q = query(usersRef, where('role', '==', 'employee'));
+                const q = query(usersRef);
                 const querySnapshot = await getFirestoreDocs(q);
                 const fetchedUsers = [];
                 const currentUserId = auth.currentUser?.uid;

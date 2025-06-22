@@ -273,6 +273,16 @@ const StoreScreen = () => {
         const canEdit = userRole === 'admin' ? item.status === 'pending' : (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
         // Logic cho phép xóa: Admin có thể xóa bất kỳ báo cáo nào. Nhân viên chỉ xóa báo cáo của mình và pending.
         const canDelete = userRole === 'admin' || (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
+        
+        // --- BẮT ĐẦU PHẦN CẦN SỬA ĐỔI ---
+
+        // Tính toán số người tham gia (người tạo + người làm cùng nếu có)
+        // Đảm bảo item.participantIds tồn tại và là một mảng
+        const numberOfParticipants = (item.participantIds && Array.isArray(item.participantIds)) ? item.participantIds.length : 1;
+        
+        // Tính toán doanh thu được chia
+        const originalPrice = item.price || 0;
+        const sharedPrice = numberOfParticipants > 0 ? originalPrice / numberOfParticipants : originalPrice;
 
         return (
             <SwipeRow 
@@ -342,13 +352,19 @@ const StoreScreen = () => {
                                 )}
                             </View>
                             <View style={styles.priceContainer}>
-                                <Text style={styles.priceText}>
-                                    {(item.price || 0).toLocaleString('vi-VN')} VNĐ
+                                <Text style={styles.sharedPriceText}>
+                                    {sharedPrice.toLocaleString('vi-VN')} VNĐ
                                 </Text>
                                 {item.isOvertime && (
                                     <Text style={styles.overtimeText}>(+30%)</Text>
                                 )}
                             </View>
+                            {/* Dòng hiển thị doanh thu gốc (nhỏ hơn, màu nhạt hơn) */}
+                            {numberOfParticipants > 1 && ( // Chỉ hiển thị nếu có chia sẻ (nhiều hơn 1 người)
+                                <Text style={styles.originalPriceNote}>
+                                    Doanh thu: {originalPrice.toLocaleString('vi-VN')} VNĐ
+                                </Text>
+                            )}
                             <View style={styles.infoRow}>
                                 <Ionicons name="people-outline" size={16} color={COLORS.gray} />
                                 <Text style={styles.infoText}>
@@ -588,6 +604,16 @@ const styles = StyleSheet.create({
     serviceText: { fontSize: 16, fontWeight: 'bold', color: COLORS.black, flex: 1, marginRight: 5 },
     priceContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, },
     priceText: { fontSize: 16, fontWeight: '600', color: COLORS.rejected },
+    sharedPriceText: { // Sửa đổi style này cho số tiền đã chia
+        fontSize: 16, // Kích thước to hơn
+        fontWeight: 'bold', // Đậm hơn
+        color: COLORS.rejected, // Màu đỏ
+    },
+    originalPriceNote: { // Style cho số tiền gốc
+        fontSize: 12, // Nhỏ hơn
+        color: COLORS.rejected, // Màu nhạt hơn
+        marginTop: 2, // Cách dòng trên một chút
+    },
     overtimeText: { marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: COLORS.primary },
     infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
     infoText: { marginLeft: 8, fontSize: 13, color: COLORS.gray, flexShrink: 1 },
