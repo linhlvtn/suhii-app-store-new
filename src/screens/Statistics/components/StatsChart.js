@@ -43,7 +43,7 @@ const StatsChart = ({ data }) => {
 const styles = StyleSheet.create({
     chartCard: {
         marginHorizontal: 20,
-        marginTop: 30,
+        marginTop: 15,
         backgroundColor: COLORS.white,
         borderRadius: 16,
         paddingVertical: 20,

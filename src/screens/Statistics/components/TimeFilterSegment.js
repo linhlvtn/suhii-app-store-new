@@ -33,6 +33,7 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         marginHorizontal: 20,
         overflow: 'hidden',
+        marginBottom: 20,
     },
     filterSegmentButton: {
         flex: 1,

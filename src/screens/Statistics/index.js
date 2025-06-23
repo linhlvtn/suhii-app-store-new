@@ -1,3 +1,5 @@
+// src/screens/Statistics/index.js
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Alert, Platform, Image, FlatList } from 'react-native';
 import { collection, query, where, getDocs, Timestamp, onSnapshot, orderBy } from 'firebase/firestore';
@@ -7,14 +9,12 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { db, auth } from '../../../firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 
-// --- IMPORT CÁC COMPONENT CON ---
 import TimeFilterSegment from './components/TimeFilterSegment';
 import SummaryCard from './components/SummaryCard';
 import StatsChart from './components/StatsChart';
 import RankItem from './components/RankItem';
 import ServicePieChart from './components/ServicePieChart';
 
-// Cấu hình ngôn ngữ tiếng Việt cho Lịch
 LocaleConfig.locales['vi'] = {
   monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
   dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'],
@@ -23,18 +23,16 @@ LocaleConfig.locales['vi'] = {
 };
 LocaleConfig.defaultLocale = 'vi';
 
-// --- THEME COLORS ---
 const COLORS = {
-    primary: '#1a1a1a', 
-    secondary: '#555', 
-    white: '#FFFFFF', 
-    lightGray: '#f0f2f5', 
-    success: '#28a745', 
+    primary: '#1a1a1a',
+    secondary: '#555',
+    white: '#FFFFFF',
+    lightGray: '#f0f2f5',
+    success: '#28a745',
     danger: '#D32F2F',
     black: '#1a1a1a',
 };
 
-// --- CÁC HÀM TIỆN ÍCH ---
 const getDateRange = (period, customDate = null) => {
     const now = new Date();
     let startDate = new Date(now), endDate = new Date(now);
@@ -76,27 +74,92 @@ const getDynamicTitle = (period, date) => {
     }
 };
 
-// --- Component cho màn hình Admin ---
 const AdminStatisticsDashboard = () => {
+    const { user } = useAuth();
     const [activeFilter, setActiveFilter] = useState('today');
     const [loading, setLoading] = useState(true);
     const [dynamicTitle, setDynamicTitle] = useState('');
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
     const [customDate, setCustomDate] = useState(new Date());
-    const [summaryData, setSummaryData] = useState({ totalRevenue: 0, revenueChange: 0, totalClients: 0, clientsChange: 0 });
+
+    const [adminPersonalSummary, setAdminPersonalSummary] = useState({ totalRevenue: 0, totalReports: 0 });
+    const [storeSummary, setStoreSummary] = useState({ totalRevenue: 0, revenueChange: 0, totalClients: 0, clientsChange: 0 });
+    
     const [chartData, setChartData] = useState({ labels: [], datasets: [{ data: [] }] });
+    const [clientChartData, setClientChartData] = useState({ labels: [], datasets: [{ data: [] }] });
+    const [personalChartData, setPersonalChartData] = useState({ labels: [], datasets: [{ data: [] }] });
+
     const [leaderboard, setLeaderboard] = useState([]);
     const [pieChartData, setPieChartData] = useState([]);
     const navigation = useNavigation();
 
-    // --- SỬA LỖI: Định nghĩa lại các component header để có thể sử dụng ---
     const HeaderLogo = () => (<Image source={require('../../../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />);
     const HeaderLogoutButton = () => {
         const handleSignOut = () => { Alert.alert("Xác nhận Đăng xuất", "Bạn có chắc muốn đăng xuất?", [{ text: "Hủy" }, { text: "Đăng xuất", onPress: () => auth.signOut(), style: "destructive" }]); };
         return (<TouchableOpacity onPress={handleSignOut} style={styles.headerButton}><Ionicons name="log-out-outline" size={28} color={COLORS.black} /></TouchableOpacity>);
     };
 
+    const getFormattedDateKey = (date, period) => {
+        switch (period) {
+            case 'today':
+            case 'custom':
+                // VD: 08:00 (nếu bạn muốn theo giờ) hoặc giữ nguyên ngày nếu muốn theo ngày
+                // Nếu muốn theo giờ, bạn cần làm tròn timestamp của Firebase về giờ gần nhất
+                return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            case 'week':
+                // VD: T2, 24/06
+                return date.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
+            case 'month':
+                // VD: 24/06
+                return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+            case 'year':
+                // VD: 06/2024
+                return date.toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' });
+            default:
+                return date.toLocaleDateString('vi-VN');
+        }
+    };
+    
+    // Hàm này được tối ưu để tạo các điểm dữ liệu liên tục cho trục X
+    const initializeDailyData = (startDate, endDate, period) => {
+        const data = {};
+        let currentDate = new Date(startDate);
+        currentDate.setHours(0,0,0,0); // Đảm bảo bắt đầu từ đầu ngày
+
+        if (period === 'today' || period === 'custom') {
+            // Với "today" hoặc "custom" (một ngày cụ thể), chúng ta sẽ tạo 24 điểm dữ liệu (mỗi giờ 1 điểm)
+            for (let i = 0; i < 24; i++) {
+                let hourDate = new Date(startDate);
+                hourDate.setHours(i, 0, 0, 0);
+                data[getFormattedDateKey(hourDate, 'today')] = 0;
+            }
+        } else if (period === 'week') {
+            // Đối với "week", tạo 7 điểm dữ liệu (mỗi ngày 1 điểm trong tuần)
+            for (let i = 0; i < 7; i++) {
+                let dayDate = new Date(startDate);
+                dayDate.setDate(dayDate.getDate() + i);
+                data[getFormattedDateKey(dayDate, 'week')] = 0;
+            }
+        } else if (period === 'month') {
+            // Đối với "month", tạo các điểm dữ liệu cho mỗi ngày trong tháng
+            while (currentDate.getMonth() === startDate.getMonth() && currentDate <= endDate) {
+                data[getFormattedDateKey(currentDate, 'month')] = 0;
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+        } else if (period === 'year') {
+            // Đối với "year", tạo 12 điểm dữ liệu (mỗi tháng 1 điểm)
+            for (let i = 0; i < 12; i++) {
+                let monthDate = new Date(startDate.getFullYear(), i, 1);
+                data[getFormattedDateKey(monthDate, 'year')] = 0;
+            }
+        }
+        return data;
+    };
+
+
     const fetchStatisticsData = useCallback(async () => {
+        if (!user) return;
+
         setLoading(true);
         const currentRange = getDateRange(activeFilter, customDate);
         const diff = currentRange.endDate.toDate().getTime() - currentRange.startDate.toDate().getTime();
@@ -104,47 +167,145 @@ const AdminStatisticsDashboard = () => {
         const prevStartDate = new Date(prevEndDate.getTime() - diff);
         const previousRange = { startDate: Timestamp.fromDate(prevStartDate), endDate: Timestamp.fromDate(prevEndDate) };
 
-        const getReportsInRange = async (range) => {
+        const getReportsInRange = async (range, userId = null) => {
             try {
-                const q = query(collection(db, "reports"), where("status", "==", "approved"), where("createdAt", ">=", range.startDate), where("createdAt", "<=", range.endDate));
+                let qRef = collection(db, "reports");
+                let conditions = [where("status", "==", "approved"), where("createdAt", ">=", range.startDate), where("createdAt", "<=", range.endDate)];
+                
+                if (userId) {
+                    conditions.push(where("participantIds", "array-contains", userId));
+                }
+
+                const q = query(qRef, ...conditions, orderBy("createdAt", "asc"));
                 const querySnapshot = await getDocs(q);
-                return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            } catch (e) { console.error("Lỗi khi lấy báo cáo đã duyệt:", e); if (e.code === 'failed-precondition') { Alert.alert("Lỗi Cấu Hình", "Thiếu chỉ mục Firestore."); } return []; }
+                return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
+            } catch (e) {
+                console.error("Lỗi khi lấy báo cáo đã duyệt:", e);
+                if (e.code === 'failed-precondition') {
+                    Alert.alert("Lỗi Cấu Hình", "Cơ sở dữ liệu của bạn thiếu chỉ mục cần thiết. Vui lòng kiểm tra console Firebase để tạo chỉ mục cho: reports collection, status, createdAt, participantIds.");
+                }
+                return [];
+            }
         };
 
         try {
-            const [currentReports, previousReports] = await Promise.all([ getReportsInRange(currentRange), getReportsInRange(previousRange) ]);
-            processData(currentReports, previousReports, currentRange.startDate.toDate(), currentRange.endDate.toDate());
+            const [currentStoreReports, previousStoreReports] = await Promise.all([
+                getReportsInRange(currentRange),
+                getReportsInRange(previousRange)
+            ]);
+
+            const currentAdminReports = await getReportsInRange(currentRange, user.uid);
+
+            processData(currentStoreReports, previousStoreReports, currentRange.startDate.toDate(), currentRange.endDate.toDate(), activeFilter);
+            processAdminPersonalData(currentAdminReports);
+            processAdminPersonalDataForChart(currentAdminReports, currentRange.startDate.toDate(), currentRange.endDate.toDate(), activeFilter);
             setDynamicTitle(getDynamicTitle(activeFilter, customDate));
-        } catch (error) { console.error("Lỗi fetchStatisticsData:", error); } finally { setLoading(false); }
-    }, [activeFilter, customDate]);
+        } catch (error) {
+            console.error("Lỗi fetchStatisticsData:", error);
+        } finally {
+            setLoading(false);
+        }
+    }, [activeFilter, customDate, user]);
+
+    const processAdminPersonalData = (reports) => {
+        let totalRevenue = 0;
+        let totalReports = 0;
     
-    const processData = (currentReports, previousReports, startDate, endDate) => {
-        const currentRevenue = currentReports.reduce((sum, report) => sum + (report.price || 0), 0);
-        const currentClients = currentReports.length;
-        const previousRevenue = previousReports.reduce((sum, report) => sum + (report.price || 0), 0);
-        const previousClients = previousReports.length;
-        const revenueChange = previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : (currentRevenue > 0 ? 100 : 0);
-        const clientsChange = previousClients > 0 ? ((currentClients - previousClients) / previousClients) * 100 : (currentClients > 0 ? 100 : 0);
-        setSummaryData({ totalRevenue: currentRevenue, revenueChange: parseFloat(revenueChange.toFixed(1)), totalClients: currentClients, clientsChange: parseFloat(clientsChange.toFixed(1)) });
+        reports.forEach(report => {
+            if (report.status === 'approved') {
+                const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
+                const revenuePerThisAdmin = (report.userId === user?.uid || report.partnerId === user?.uid) ? (report.price || 0) / numParticipants : 0;
+                
+                totalRevenue += revenuePerThisAdmin;
+                totalReports += 1;
+            }
+        });
+        setAdminPersonalSummary({ totalRevenue, totalReports });
+    };
+
+    const processAdminPersonalDataForChart = (reports, startDate, endDate, period) => {
+        const dailyData = initializeDailyData(startDate, endDate, period); // Sử dụng hàm khởi tạo
     
+        reports.forEach(report => {
+            const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
+            const revenuePerThisAdmin = (report.userId === user?.uid || report.partnerId === user?.uid) ? (report.price || 0) / numParticipants : 0;
+    
+            let dateKey = getFormattedDateKey(report.createdAt, period);
+            if (dailyData[dateKey] !== undefined) {
+                dailyData[dateKey] += revenuePerThisAdmin / 1000000;
+            }
+        });
+    
+        setPersonalChartData({
+            labels: Object.keys(dailyData),
+            datasets: [{ data: Object.values(dailyData) }]
+        });
+    };
+
+    const processData = (currentReports, previousReports, startDate, endDate, period) => {
+        // Overall Store Statistics
+        const currentStoreRevenue = currentReports.reduce((sum, report) => sum + (report.price || 0), 0);
+        const currentStoreClients = new Set(currentReports.map(report => report.id)).size;
+        const previousStoreRevenue = previousReports.reduce((sum, report) => sum + (report.price || 0), 0);
+        const previousStoreClients = new Set(previousReports.map(report => report.id)).size;
+
+        const revenueChange = previousStoreRevenue > 0 ? ((currentStoreRevenue - previousStoreRevenue) / previousStoreRevenue) * 100 : (currentStoreRevenue > 0 ? 100 : 0);
+        const clientsChange = previousStoreClients > 0 ? ((currentStoreClients - previousStoreClients) / previousStoreClients) * 100 : (currentStoreClients > 0 ? 100 : 0);
+        setStoreSummary({ totalRevenue: currentStoreRevenue, revenueChange: parseFloat(revenueChange.toFixed(1)), totalClients: currentStoreClients, clientsChange: parseFloat(clientsChange.toFixed(1)) });
+    
+        // Chart Data (Daily Revenue for the store) - For the larger StatsChart AND SummaryCard sparkline
+        const dailyRevenue = initializeDailyData(startDate, endDate, period); // Sử dụng hàm khởi tạo
+        currentReports.forEach(report => {
+            let dateKey = getFormattedDateKey(report.createdAt, period);
+            if (dailyRevenue[dateKey] !== undefined) {
+                dailyRevenue[dateKey] += (report.price || 0) / 1000000;
+            }
+        });
+        setChartData({ labels: Object.keys(dailyRevenue), datasets: [{ data: Object.values(dailyRevenue) }] });
+
+        // Client Chart Data (Sparkline for Total Clients)
+        const dailyClients = initializeDailyData(startDate, endDate, period); // Sử dụng hàm khởi tạo
+        currentReports.forEach(report => {
+            let dateKey = getFormattedDateKey(report.createdAt, period);
+            if (dailyClients[dateKey] !== undefined) {
+                dailyClients[dateKey] += 1;
+            }
+        });
+        setClientChartData({ labels: Object.keys(dailyClients), datasets: [{ data: Object.values(dailyClients) }] });
+
+        // Leaderboard (Employee Performance) - (Giữ nguyên)
         const employeeData = currentReports.reduce((acc, report) => {
             const { employeeName, userId, price, partnerId, partnerName } = report;
-            const revenueShare = partnerId ? (price || 0) / 2 : (price || 0);
-            if (userId) { if (!acc[userId]) acc[userId] = { id: userId, name: employeeName, revenue: 0, clients: 0 }; acc[userId].revenue += revenueShare; acc[userId].clients += 1; }
-            if (partnerId) { if (!acc[partnerId]) acc[partnerId] = { id: partnerId, name: partnerName || 'Không rõ', revenue: 0, clients: 0 }; acc[partnerId].revenue += revenueShare; acc[partnerId].clients += 1; }
+            const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
+            const revenueShare = (price || 0) / numParticipants;
+
+            if (userId) {
+                if (!acc[userId]) acc[userId] = { id: userId, name: employeeName, revenue: 0, clients: 0 };
+                acc[userId].revenue += revenueShare;
+                acc[userId].clients += 1;
+            }
+            if (partnerId && partnerId !== userId) {
+                if (!acc[partnerId]) acc[partnerId] = { id: partnerId, name: partnerName || 'Không rõ', revenue: 0, clients: 0 };
+                acc[partnerId].revenue += revenueShare;
+            }
             return acc;
         }, {});
         setLeaderboard(Array.from(Object.values(employeeData)).sort((a, b) => b.revenue - a.revenue));
     
-        const dailyRevenue = {};
-        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) { const dateKey = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }); dailyRevenue[dateKey] = 0; }
-        currentReports.forEach(report => { const dateKey = report.createdAt.toDate().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }); if (dailyRevenue[dateKey] !== undefined) dailyRevenue[dateKey] += (report.price || 0) / 1000000; });
-        setChartData({ labels: Object.keys(dailyRevenue), datasets: [{ data: Object.values(dailyRevenue) }] });
-        
-        const serviceCounts = currentReports.reduce((acc, report) => { const serviceNames = (report.service || 'Không xác định').split(',').map(s => s.trim()); serviceNames.forEach(serviceName => { acc[serviceName] = (acc[serviceName] || 0) + 1; }); return acc; }, {});
-        const pieColors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4'];
-        const pieData = Object.keys(serviceCounts).map((service, index) => ({ name: service, population: serviceCounts[service], color: pieColors[index % pieColors.length], legendFontColor: '#7F7F7F', legendFontSize: 15 }));
+        // Service Pie Chart Data (Overall store services) - (Giữ nguyên)
+        const serviceCounts = currentReports.reduce((acc, report) => {
+            const serviceNames = (report.service || 'Không xác định').split(',').map(s => s.trim());
+            serviceNames.forEach(serviceName => { acc[serviceName] = (acc[serviceName] || 0) + 1; });
+            return acc;
+        }, {});
+        const pieColors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6'];
+        const pieData = Object.keys(serviceCounts).map((service, index) => ({
+            name: service,
+            population: serviceCounts[service],
+            color: pieColors[index % pieColors.length],
+            legendFontColor: COLORS.secondary,
+            legendFontSize: 15
+        }));
         setPieChartData(pieData);
     };
 
@@ -157,7 +318,7 @@ const AdminStatisticsDashboard = () => {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <View style={{ width: 100 }} /> 
+                <View style={{ width: 100 }} />
                 <HeaderLogo />
                 <View style={styles.headerRightContainer}>
                     <HeaderLogoutButton />
@@ -174,14 +335,54 @@ const AdminStatisticsDashboard = () => {
                 <TimeFilterSegment activeFilter={activeFilter} onFilterChange={handleFilterChange} />
                 {loading ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>) : (
                     <>
-                        <SummaryCard title="Tổng Doanh Thu" value={`${(summaryData.totalRevenue || 0).toLocaleString('vi-VN')} đ`} change={summaryData.revenueChange || 0} icon="cash-outline" color={COLORS.primary} />
-                        <SummaryCard title="Tổng Lượt Khách" value={(summaryData.totalClients || 0).toString()} change={summaryData.clientsChange || 0} icon="people-outline" color="#3498db" />
-                        <StatsChart data={chartData} />
-                        <ServicePieChart data={pieChartData} />
+                        {/* Thẻ thống kê tổng quát của CỬA HÀNG */}
+                        <Text style={styles.sectionHeading}>Thống kê tổng cửa hàng</Text>
+                        <View style={styles.summaryCardsRow}> {/* Sử dụng style mới cho hàng card */}
+                            <SummaryCard
+                                title="Tổng Doanh thu"
+                                totalRevenue={storeSummary.totalRevenue}
+                                change={storeSummary.revenueChange}
+                                type="storeSummary"
+                                chartData={chartData}
+                                isDailyReport={activeFilter === 'today' || activeFilter === 'custom'} // Truyền prop này
+                            />
+                            <SummaryCard
+                                title="Tổng Lượt khách"
+                                value={storeSummary.totalClients.toString()}
+                                change={storeSummary.clientsChange}
+                                icon="people-outline"
+                                color="#3498db"
+                                type="storeClients"
+                                chartData={clientChartData}
+                                isDailyReport={activeFilter === 'today' || activeFilter === 'custom'} // Truyền prop này
+                            />
+                        </View>
+
+                        {/* Biểu đồ Doanh thu của CỬA HÀNG (StatsChart lớn) */}
+                        <StatsChart data={chartData} title="Biểu đồ Doanh thu (triệu VNĐ) toàn cửa hàng" style={styles.chartCard} /> {/* Áp dụng style */}
+                        <ServicePieChart data={pieChartData} title="Tỉ lệ Dịch vụ toàn cửa hàng" style={styles.chartCard} /> {/* Áp dụng style */}
+
+                        {/* Thẻ thống kê CÁ NHÂN CỦA ADMIN */}
+                        {adminPersonalSummary.totalReports > 0 && (
+                            <>
+                                <Text style={styles.sectionHeading}>Thống kê cá nhân của Admin</Text>
+                                <View style={styles.summaryCardsRow}>
+                                    <SummaryCard
+                                        title="Doanh thu cá nhân của bạn"
+                                        totalRevenue={adminPersonalSummary.totalRevenue}
+                                        totalReports={adminPersonalSummary.totalReports}
+                                        chartData={personalChartData}
+                                        isDailyReport={activeFilter === 'today' || activeFilter === 'custom'} // Truyền prop này
+                                        customCardWidth="100%" // Đặt width 100% cho card này
+                                    />
+                                </View>
+                            </>
+                        )}
+
                         <View style={styles.leaderboardContainer}>
                             <Text style={styles.sectionTitle}>Hiệu suất Nhân viên</Text>
                             {leaderboard && leaderboard.length > 0 ? (
-                                leaderboard.map((item, index) => ( 
+                                leaderboard.map((item, index) => (
                                     <TouchableOpacity key={item.id || index} onPress={() => handleRankItemPress(item)}>
                                         <RankItem item={item} index={index} />
                                     </TouchableOpacity>
@@ -204,7 +405,6 @@ const AdminStatisticsDashboard = () => {
     );
 };
 
-// --- Component chính điều hướng ---
 const StatisticsScreen = () => {
     const { user, userRole, initializing } = useAuth();
     const navigation = useNavigation();
@@ -242,13 +442,55 @@ const styles = StyleSheet.create({
     headerLabel: { fontSize: 18, color: COLORS.secondary, marginBottom: 4, },
     titleTouchable: { flexDirection: 'row', alignItems: 'center' },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: COLORS.primary, },
-    leaderboardContainer: { marginTop: 30, },
-    sectionTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.primary, marginBottom: 15, paddingHorizontal: 20, },
-    noDataContainer: { height: 100, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 12, marginHorizontal: 20, },
+    
+    // Style mới cho hàng chứa 2 SummaryCard
+    summaryCardsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20, // Khoảng cách lề đồng nhất
+        marginBottom: 0,
+        // Đảm bảo không có margin Horizontal bên trong SummaryCard
+    },
+
+    leaderboardContainer: {
+        marginTop: 15, // Giảm khoảng cách để đồng nhất
+        marginHorizontal: 20, // Khoảng cách lề đồng nhất
+        backgroundColor: COLORS.white, // Thêm nền trắng cho leaderboard
+        borderRadius: 12, // Bo góc cho leaderboard
+        paddingVertical: 15, // Padding bên trong
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.primary,
+        marginBottom: 15,
+        paddingHorizontal: 15, // Đảm bảo padding cho title bên trong leaderboardContainer
+    },
+    sectionHeading: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.primary,
+        marginTop: 15,
+        marginBottom: 15,
+        paddingHorizontal: 20 // Khoảng cách lề đồng nhất
+    },
+    noDataContainer: {
+        height: 100,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: COLORS.white,
+        borderRadius: 12,
+        marginHorizontal: 20, // Giữ lại nếu muốn noDataContainer có lề riêng
+    },
     noDataText: { color: COLORS.secondary, },
     datePickerBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', padding: 20, },
     datePickerContent: { backgroundColor: COLORS.white, borderRadius: 15, padding: 5, width: '100%', maxWidth: 350, shadowColor: "#000", shadowOffset: { width: 0, height: 2, }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5, },
-    summaryContainer: {},
+    
+    // Style cho StatsChart và ServicePieChart để đồng nhất lề
+    chartCard: {
+        marginHorizontal: 20, // Khoảng cách lề đồng nhất
+        marginBottom: 15,
+    },
 });
 
 export default StatisticsScreen;

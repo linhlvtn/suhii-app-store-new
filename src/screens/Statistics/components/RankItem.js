@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         paddingHorizontal: 15,
         borderRadius: 12,
-        marginBottom: 10,
+        marginBottom: 0,
     },
     rankInfo: {
         flexDirection: 'row',
