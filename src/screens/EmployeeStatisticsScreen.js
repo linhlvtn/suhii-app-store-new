@@ -1,5 +1,4 @@
 // src/screens/EmployeeStatisticsScreen.js
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Alert, Platform, FlatList, Image } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -41,8 +40,8 @@ const getDateRange = (period, customDate = null) => {
         switch (period) {
             case 'today': startDate = new Date(now); break;
             case 'week':
-                const dayOfWeek = now.getDay();
-                const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+                const dayOfWeek = now.getDay(); // 0 for Sunday, 1 for Monday, ..., 6 for Saturday
+                const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday as start of week
                 startDate = new Date(now.setDate(diff));
                 endDate = new Date(startDate);
                 endDate.setDate(startDate.getDate() + 6);
@@ -73,7 +72,6 @@ const getDynamicTitle = (period, date) => {
     }
 };
 
-// Hàm mới để định dạng ngày cho biểu đồ (tương tự như trong Statistics/index.js)
 const getFormattedDateKey = (date, period) => {
     switch (period) {
         case 'today':
@@ -93,7 +91,7 @@ const getFormattedDateKey = (date, period) => {
 const initializeDailyData = (startDate, endDate, period) => {
     const data = {};
     let currentDate = new Date(startDate);
-    currentDate.setHours(0,0,0,0); 
+    currentDate.setHours(0,0,0,0);
 
     if (period === 'today' || period === 'custom') {
         for (let i = 0; i < 24; i++) {
@@ -127,7 +125,6 @@ const EmployeeStatisticsScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
     
-    // Lấy employeeId từ route params hoặc dùng uid của người dùng hiện tại nếu không có
     const employeeId = route.params?.employeeId || authUser?.uid;
     const employeeName = route.params?.employeeName || (authUser?.displayName || authUser?.email?.split('@')[0]) || 'Của tôi';
 
@@ -141,15 +138,13 @@ const EmployeeStatisticsScreen = () => {
     const [chartData, setChartData] = useState({ labels: [], datasets: [{ data: [] }] });
     const [pieChartData, setPieChartData] = useState([]);
     const [actualRevenue, setActualRevenue] = useState(0);
-    const [personalChartData, setPersonalChartData] = useState({ labels: [], datasets: [{ data: [] }] }); // Biểu đồ cá nhân
+    const [personalChartData, setPersonalChartData] = useState({ labels: [], datasets: [{ data: [] }] });
 
 
     const handleBackButtonPress = () => {
         if (userRole === 'admin' && route.params?.employeeId) {
-            // Nếu là admin và đang xem stats của nhân viên khác, quay lại màn hình admin
             navigation.goBack();
         } else {
-            // Nếu là nhân viên tự xem stats, quay lại màn hình chính của nhân viên
             navigation.navigate('MainTabs', { screen: 'Trang chủ' });
         }
     };
@@ -169,44 +164,38 @@ const EmployeeStatisticsScreen = () => {
                 where("participantIds", "array-contains", employeeId),
                 where("createdAt", ">=", startDate),
                 where("createdAt", "<=", endDate),
-                orderBy("createdAt", "asc") // Order by asc for chart data
+                orderBy("createdAt", "asc")
             );
             const querySnapshot = await getDocs(q);
-            const fetchedReports = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt.toDate() })); // Chuyển Timestamp sang Date
+            const fetchedReports = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
 
             let totalRevenue = 0;
             let calculatedActualRevenue = 0;
-            const dailyRevenueForChart = initializeDailyData(startDate.toDate(), endDate.toDate(), selectedPeriod); // Cho biểu đồ lớn
+            const dailyRevenueForChart = initializeDailyData(startDate.toDate(), endDate.toDate(), selectedPeriod);
             const serviceCounts = {};
 
             fetchedReports.forEach(report => {
                 const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
                 const reportPrice = report.price || 0;
 
-                // Doanh thu cá nhân thực nhận (hoa hồng)
                 let revenuePerThisEmployeeActual = 0;
                 if (report.status === 'approved') {
-                    // Nếu là ngoài giờ và nhân viên này là người tạo hoặc partner, tính 30% tổng tiền
                     if (report.isOvertime && (report.userId === employeeId || report.partnerId === employeeId)) {
                         revenuePerThisEmployeeActual = reportPrice * 0.30;
                     } else if (report.userId === employeeId || report.partnerId === employeeId) {
-                        // Nếu không phải ngoài giờ, tính 10% của phần doanh thu cá nhân được chia
                         const personalShare = reportPrice / numParticipants;
                         revenuePerThisEmployeeActual = personalShare * 0.10;
                     }
                     calculatedActualRevenue += revenuePerThisEmployeeActual;
 
-                    // Tổng doanh thu cá nhân (phần doanh thu được chia)
                     const personalRevenueShare = (report.userId === employeeId || report.partnerId === employeeId) ? reportPrice / numParticipants : 0;
                     totalRevenue += personalRevenueShare;
 
-                    // Dữ liệu cho biểu đồ lớn (tổng doanh thu cá nhân theo thời gian)
                     const dateKey = getFormattedDateKey(report.createdAt, selectedPeriod);
                     if (dailyRevenueForChart[dateKey] !== undefined) {
-                        dailyRevenueForChart[dateKey] += personalRevenueShare / 1000000; // Chuyển sang triệu VNĐ
+                        dailyRevenueForChart[dateKey] += personalRevenueShare / 1000000;
                     }
 
-                    // Dữ liệu cho biểu đồ tròn (tỷ lệ dịch vụ)
                     if (report.service) {
                         report.service.split(', ').forEach(service => {
                             const s = service.trim();
@@ -216,11 +205,11 @@ const EmployeeStatisticsScreen = () => {
                 }
             });
 
-            setReports(fetchedReports); // Lưu trữ toàn bộ báo cáo để hiển thị danh sách
+            setReports(fetchedReports);
 
             setSummaryData({
                 totalRevenue: totalRevenue || 0,
-                totalReports: fetchedReports.filter(r => r.status === 'approved').length || 0, // Chỉ đếm báo cáo đã duyệt
+                totalReports: fetchedReports.filter(r => r.status === 'approved').length || 0,
             });
             setActualRevenue(calculatedActualRevenue || 0);
 
@@ -229,9 +218,8 @@ const EmployeeStatisticsScreen = () => {
                 datasets: [{ data: Object.values(dailyRevenueForChart) }],
             });
 
-            // Dữ liệu cho sparkline "Tổng doanh thu cá nhân"
             setPersonalChartData({
-                labels: Object.keys(dailyRevenueForChart), // Tái sử dụng labels
+                labels: Object.keys(dailyRevenueForChart),
                 datasets: [{ data: Object.values(dailyRevenueForChart) }]
             });
 
@@ -250,18 +238,13 @@ const EmployeeStatisticsScreen = () => {
         } finally {
             setLoading(false);
         }
-    }, [employeeId, selectedPeriod, selectedDate]); // Thêm authUser.uid vào dependency nếu bạn dùng nó trong tính toán
-
+    }, [employeeId, selectedPeriod, selectedDate, userRole]);
 
     useEffect(() => {
-        // Nếu userRole là 'employee' và employeeId trong route params trùng với uid của authUser,
-        // hoặc nếu employeeId không được truyền (nghĩa là đang xem chính mình), thì fetch.
-        // Điều kiện này giúp tránh fetch lại dữ liệu nếu admin đang xem stats của một employee khác.
         if (authUser && (userRole === 'employee' || employeeId)) {
             fetchEmployeeStats();
         }
     }, [fetchEmployeeStats, authUser, employeeId, userRole]);
-
 
     const onDayPress = (day) => {
         const newDate = new Date(day.dateString + 'T00:00:00');
@@ -290,16 +273,36 @@ const EmployeeStatisticsScreen = () => {
         if (item.partnerName) participants.push(item.partnerName);
         const participantText = participants.length > 0 ? participants.join(' & ') : 'N/A';
 
-        // Doanh thu thực nhận cho từng báo cáo (chỉ hiển thị cho admin khi xem báo cáo được duyệt)
+        // Doanh thu thực nhận cho từng báo cáo (chỉ hiển thị cho admin)
         let displayActualReceivedRevenue = '';
-        if (userRole === 'admin' && item.status === 'approved' && typeof item.actualReceivedRevenue === 'number') {
-             displayActualReceivedRevenue = `Thực nhận: ${item.actualReceivedRevenue.toLocaleString('vi-VN')} VNĐ`;
+        if (userRole === 'admin' && item.status === 'approved') {
+             const numParticipants = (item.participantIds && Array.isArray(item.participantIds) && item.participantIds.length > 0) ? item.participantIds.length : 1;
+             const reportPrice = item.price || 0;
+             let actualPerReport = 0;
+             if (item.isOvertime && (item.userId === employeeId || item.partnerId === employeeId)) {
+                 actualPerReport = reportPrice * 0.30;
+             } else if (item.userId === employeeId || item.partnerId === employeeId) {
+                 const personalShare = reportPrice / numParticipants;
+                 actualPerReport = personalShare * 0.10;
+             }
+             if (actualPerReport > 0) {
+                // Thay thế VNĐ bằng ₫
+                displayActualReceivedRevenue = `Thực nhận: ${actualPerReport.toLocaleString('vi-VN').replace(/VNĐ/g, '₫').trim()}`;
+             }
         }
+
+        // Định dạng ngày tạo báo cáo
+        const formattedCreationDate = item.createdAt ? item.createdAt.toLocaleDateString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        }) : 'Không rõ';
 
 
         return (
             <TouchableWithoutFeedback>
                 <View style={styles.reportItemContainer}>
+                    {/* Phần ảnh và icon trạng thái trên ảnh */}
                     <View> 
                         <Image
                             source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/default-image.png')}
@@ -310,29 +313,37 @@ const EmployeeStatisticsScreen = () => {
                         </View>
                     </View>
                     
+                    {/* Phần nội dung báo cáo */}
                     <View style={styles.reportItemContent}>
                         <View style={styles.reportItemHeaderInner}>
                             <Text style={styles.reportServiceText} numberOfLines={2}>
                                 {item.service || 'Dịch vụ không xác định'}
                             </Text>
+                            {/* Thêm ngày tạo báo cáo vào đây */}
+                            <Text style={styles.reportDateText}>{formattedCreationDate}</Text>
                         </View>
                         
+                        {/* Hiển thị giá và thông tin ngoài giờ */}
                         <View style={styles.reportPriceContainer}>
                             <Text style={styles.reportPriceText}>
-                                {(item.price || 0).toLocaleString('vi-VN')} VNĐ
+                                {(item.price || 0).toLocaleString('vi-VN').replace(/VNĐ/g, '₫').trim()}
                             </Text>
                             {item.isOvertime && (
                                 <Text style={styles.reportOvertimeText}>(+30%)</Text>
                             )}
                         </View>
                         
-                        {displayActualReceivedRevenue ? ( // Chỉ hiển thị nếu có giá trị
+                        {/* Dòng doanh thu thực nhận nhỏ phía dưới */}
+                        {displayActualReceivedRevenue ? (
                             <View style={styles.reportInfoRow}>
                                 <Ionicons name="cash" size={16} color={COLORS.success} />
-                                <Text style={styles.reportActualRevenueText}>{displayActualReceivedRevenue}</Text>
+                                <Text style={styles.reportActualRevenueText}>
+                                    {displayActualReceivedRevenue}
+                                </Text>
                             </View>
                         ) : null}
                         
+                        {/* Thông tin người làm cùng */}
                         <View style={styles.reportInfoRow}>
                             <Ionicons name="people-outline" size={16} color={COLORS.secondary} />
                             <Text style={styles.reportInfoText}>
@@ -340,6 +351,7 @@ const EmployeeStatisticsScreen = () => {
                             </Text>
                         </View>
                         
+                        {/* Ghi chú */}
                         {item.note ? (
                             <View style={styles.reportInfoRow}>
                                 <Ionicons name="document-text-outline" size={16} color={COLORS.secondary} />
@@ -383,7 +395,7 @@ const EmployeeStatisticsScreen = () => {
             </TouchableOpacity>
             <View style={styles.headerTitleContainer}>
                 <Text style={styles.headerLabel}>{userRole === 'admin' && authUser?.uid !== employeeId ? 'Thống kê nhân viên:' : 'Thống kê:'}</Text>
-                <Text style={styles.headerTitle} numberOfLines={1}>{employeeName}</Text>
+                <Text style={styles.headerTitle} numberOfLines={1}>{employeeName || 'Nhân viên'}</Text>
             </View>
             <View style={{ width: 40 }} />
             </View>
@@ -403,23 +415,22 @@ const EmployeeStatisticsScreen = () => {
                     </View>
                  ) : (
                      <>
-                     <View style={styles.summaryCardWrapper}>
-                        <SummaryCard
-                            title="Doanh thu cá nhân"
-                            totalRevenue={summaryData.totalRevenue}
-                            totalReports={summaryData.totalReports}
-                            isDailyReport={selectedPeriod === 'today' || selectedPeriod === 'custom'} // Truyền prop này
-                            customCardWidth="100%" // Đặt width 100%
-                            chartData={personalChartData} // Truyền dữ liệu sparkline
-                        />
+                        <View style={styles.summaryCardWrapper}>
+                            <SummaryCard
+                                title="Tổng doanh thu cá nhân"
+                                totalRevenue={summaryData.totalRevenue}
+                                totalReports={summaryData.totalReports}
+                                isDailyReport={selectedPeriod === 'today' || selectedPeriod === 'custom'}
+                                customCardWidth="100%"
+                                chartData={personalChartData}
+                            />
                         </View>
 
-                       {/* SummaryCard: Doanh thu thực nhận - Chỉ hiển thị cho ADMIN */}
-                        {userRole === 'admin' && ( // Điều kiện hiển thị: Chỉ là admin mới thấy
-                            <View style={styles.summaryCardWrapper}> {/* Thêm wrapper View với marginHorizontal */}
+                        {userRole === 'admin' && (
+                            <View style={styles.summaryCardWrapper}>
                                 <SummaryCard
                                     title="Doanh thu thực nhận"
-                                    value={`${actualRevenue.toLocaleString('vi-VN')} VNĐ`}
+                                    value={`${actualRevenue.toLocaleString('vi-VN').replace(/VNĐ/g, '₫').trim()} `}
                                     description="Dự kiến hoa hồng + thưởng ngoài giờ"
                                     type="actualRevenue"
                                     customCardWidth="100%"
@@ -428,7 +439,15 @@ const EmployeeStatisticsScreen = () => {
                                 />
                             </View>
                         )}
-                        <StatsChart data={chartData} title="Biểu đồ doanh thu theo cá nhân" style={styles.chartCardMargin} />
+
+                        {/* <StatsChart data={chartData} title="Biểu đồ doanh thu theo cá nhân" style={styles.chartCardMargin} /> */}
+                         <StatsChart
+                            data={chartData}
+                            title="Biểu đồ doanh thu theo cá nhân" // Đổi VNĐ sang ₫ (hoặc giữ nguyên nếu đã là ₫)
+                            style={styles.chartCardMargin}
+                            // Truyền chartType dựa trên selectedPeriod
+                            chartType={selectedPeriod === 'today' || selectedPeriod === 'week' || selectedPeriod === 'custom' ? 'bar' : 'line'}
+                        />
                         <ServicePieChart data={pieChartData} title="Tỷ lệ dịch vụ theo cá nhân" style={styles.chartCardMargin} />
 
                         {reports.length > 0 && (
@@ -464,18 +483,22 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.primary, },
     scrollContent: { paddingBottom: 20, },
     subHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10, },
-    timeFilterSegmentMargin: { marginHorizontal: 20, marginBottom: 15 }, // Đảm bảo margin ngang đồng nhất
+    timeFilterSegmentMargin: { marginHorizontal: 20, marginBottom: 15 },
     titleTouchable: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', },
     subHeaderTitle: { fontSize: 18, fontWeight: '600', color: COLORS.secondary, },
     loadingContainer: { height: 400, justifyContent: 'center', alignItems: 'center', },
     datePickerBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', padding: 20, },
     datePickerContent: { backgroundColor: COLORS.white, borderRadius: 15, padding: 5, width: '100%', maxWidth: 350, shadowColor: "#000", shadowOffset: { width: 0, height: 2, }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5, },
 
-    // Reports List (danh sách báo cáo trong kỳ) - Đã có khoảng lề đúng
+    summaryCardWrapper: {
+        marginHorizontal: 20,
+        marginBottom: 10,
+    },
+
     reportsListSection: {
         backgroundColor: COLORS.white,
         borderRadius: 12,
-        marginHorizontal: 20, // Khoảng lề đồng nhất
+        marginHorizontal: 20,
         marginBottom: 20,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -489,7 +512,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: COLORS.primary,
         marginBottom: 15,
-        paddingHorizontal: 15, // Đảm bảo padding cho title bên trong reportsListSection
+        paddingHorizontal: 15,
         paddingTop: 15,
     },
     reportItemContainer: {
@@ -531,6 +554,11 @@ const styles = StyleSheet.create({
         flex: 1,
         marginRight: 5,
     },
+    reportDateText: { // Style mới cho ngày tạo báo cáo
+        fontSize: 13,
+        color: COLORS.secondary,
+        fontWeight: '500',
+    },
     reportPriceContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -547,7 +575,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: COLORS.primary,
     },
-    reportActualRevenueText: { // Style cho "Doanh thu thực nhận" trong danh sách báo cáo
+    reportActualRevenueText: {
         fontSize: 13,
         color: COLORS.success,
         fontWeight: 'bold',
@@ -564,6 +592,19 @@ const styles = StyleSheet.create({
         color: COLORS.secondary,
         flexShrink: 1,
     },
+    reportStatusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 15,
+        backgroundColor: COLORS.lightGray,
+    },
+    reportStatusText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        marginLeft: 4,
+    },
     reportSeparator: {
         height: 1,
         backgroundColor: '#f0f0f0',
@@ -577,14 +618,10 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: COLORS.secondary,
     },
-    // New style for StatsChart and ServicePieChart to give consistent horizontal margin
     chartCardMargin: {
-        marginHorizontal: 20, // Đồng nhất với các card khác
-        marginBottom: 20, // Thêm khoảng cách dưới
-    },
-    summaryCardWrapper: {
-        marginHorizontal: 20, // Khoảng lề đồng nhất cho các SummaryCard
-    },
+        marginHorizontal: 20,
+        marginBottom: 20,
+    }
 });
 
 export default EmployeeStatisticsScreen;
