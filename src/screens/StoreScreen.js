@@ -371,14 +371,14 @@ const StoreScreen = () => {
                                     {item.employeeName}{item.partnerName && ` & ${item.partnerName}`}
                                 </Text>
                             </View>
-                            {item.note ? (
+                            {item.note && typeof item.note === 'string' && item.note.trim() !== '' && (
                                 <View style={styles.infoRow}>
                                     <Ionicons name="document-text-outline" size={16} color={COLORS.gray} />
                                     <Text style={styles.infoText} numberOfLines={1}>
                                         {item.note}
                                     </Text>
                                 </View>
-                            ) : null}
+                            )}
                             {userRole === 'admin' && item.status === 'pending' && (
                                 <View style={styles.adminActions}>
                                     <TouchableOpacity 
@@ -412,7 +412,7 @@ const StoreScreen = () => {
             <View style={styles.sectionHeader}>
                 <Text style={styles.sectionHeaderText}>{section.title}</Text>
                 <Text style={styles.sectionRevenueText}>
-                    Doanh thu: {totalSectionRevenue.toLocaleString('vi-VN')} VNĐ
+                    Doanh thu: {totalSectionRevenue.toLocaleString('vi-VN')}₫
                 </Text>
             </View>
         );

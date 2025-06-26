@@ -432,8 +432,8 @@
 // src/screens/Statistics/index.js
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Alert, Platform, Image, FlatList } from 'react-native';
-import { collection, query, where, getDocs, Timestamp, onSnapshot, orderBy } from 'firebase/firestore';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Alert, Platform, Image } from 'react-native';
+import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -489,21 +489,28 @@ const getDateRange = (period, customDate = null) => {
     return { startDate: Timestamp.fromDate(startDate), endDate: Timestamp.fromDate(endDate) };
 };
 
-const getDynamicTitle = (period, date) => {
-    if (period === 'custom' && date) return `Ngày ${date.toLocaleDateString('vi-VN')}`;
-    const now = new Date();
-    switch (period) {
-        case 'today': return `Hôm nay, ${now.toLocaleDateString('vi-VN')}`;
-        case 'week':
-            const startOfWeek = getDateRange('week').startDate.toDate();
-            const endOfWeek = new Date(startOfWeek);
-            endOfWeek.setDate(endOfWeek.getDate() + 6);
-            return `Tuần này (${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1} - ${endOfWeek.getDate()}/${endOfWeek.getMonth() + 1})`;
-        case 'month': return `Tháng ${now.getMonth() + 1}, ${now.getFullYear()}`;
-        case 'year': return `Năm ${now.getFullYear()}`;
-        default: return 'Tổng quan';
-    }
-};
+    const getDynamicTitle = (period, date) => {
+        const now = new Date();
+        if (period === 'custom' && date) {
+            return `Ngày ${date.toLocaleDateString('vi-VN')}`;
+        }
+        switch (period) {
+            case 'today':
+                return `Hôm nay, ${now.toLocaleDateString('vi-VN')}`;
+            case 'week': {
+                const startOfWeek = getDateRange('week').startDate.toDate();
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(endOfWeek.getDate() + 6);
+                return `Tuần này (${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1} - ${endOfWeek.getDate()}/${endOfWeek.getMonth() + 1})`;
+            }
+            case 'month':
+                return `Tháng ${now.getMonth() + 1}, ${now.getFullYear()}`;
+            case 'year':
+                return `Năm ${now.getFullYear()}`;
+            default:
+                return 'Tổng quan';
+        }
+    };
 
 const AdminStatisticsDashboard = () => {
     const { user } = useAuth();
@@ -826,6 +833,7 @@ const AdminStatisticsDashboard = () => {
                 {loading ? (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="large" color={COLORS.primary} />
+                        <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
                     </View>
                 ) : (
                     <>
@@ -1031,6 +1039,23 @@ const styles = StyleSheet.create({
         marginHorizontal: 20, // Khoảng cách lề đồng nhất
         marginBottom: 15,
     },
+
+    lottieContainer: { // Style mới cho container của lottie
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: 300, // Chiều cao cố định để lottie hiển thị tốt trong không gian loading
+        backgroundColor: COLORS.lightGray,
+    },
+    lottieSpinner: { // Style cho animation lottie
+        width: 150,
+        height: 150,
+    },
+    loadingText: { // Style cho text loading
+        marginTop: 10,
+        fontSize: 16,
+        color: COLORS.secondary,
+    }
 });
 
 export default StatisticsScreen;

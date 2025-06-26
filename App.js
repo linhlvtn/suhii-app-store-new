@@ -2,8 +2,9 @@
 
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { ActivityIndicator, View, StatusBar } from 'react-native';
+import { ActivityIndicator, View, StatusBar, StyleSheet, Text } from 'react-native';
 import { MenuProvider } from 'react-native-popup-menu';
+import LottieView from 'lottie-react-native';
 
 // --- IMPORT CONTEXT ---
 import { AuthProvider, useAuth } from './src/context/AuthContext'; 
@@ -14,19 +15,22 @@ import AppStack from './src/navigation/AppStack';
 
 // --- COMPONENT CON ĐỂ QUẢN LÝ ĐIỀU HƯỚNG ---
 const AppNavigator = () => {
-  // Sử dụng hook để lấy trạng thái từ "bộ nhớ toàn cục"
   const { user, initializing } = useAuth();
 
-  // Hiển thị vòng quay loading trong khi đang xác thực người dùng
   if (initializing) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View style={styles.lottieLoadingContainer}>
+        <LottieView
+          source={require('./assets/loading.json')}
+          autoPlay
+          loop
+          style={styles.lottieAnimation}
+        />
+        <Text style={styles.loadingText}>Đang tải...</Text>
       </View>
     );
   }
 
-  // Sau khi xác thực xong, quyết định hiển thị màn hình nào
   return (
     <>
       <StatusBar barStyle="dark-content" />
@@ -35,11 +39,9 @@ const AppNavigator = () => {
   );
 }
 
-
 // --- COMPONENT GỐC CỦA ỨNG DỤNG ---
 export default function App() {
   return (
-    // Bọc toàn bộ ứng dụng bằng AuthProvider và MenuProvider
     <AuthProvider>
       <MenuProvider>
         <NavigationContainer>
@@ -50,6 +52,23 @@ export default function App() {
   );
 }
 
+const styles = StyleSheet.create({
+    lottieLoadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f5f5f5',
+    },
+    lottieAnimation: {
+        width: 150,
+        height: 150,
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#666',
+    }
+});
 
 
 // // App.js

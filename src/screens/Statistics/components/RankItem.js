@@ -9,10 +9,10 @@ const COLORS = { primary: '#1a1a1a', secondary: '#555', success: '#28a745', whit
 const RankItem = ({ item, index }) => {
     const getRankIcon = () => {
         switch(index) {
-            case 0: return <Ionicons name="medal" size={28} color="#FFD700" />;
-            case 1: return <Ionicons name="medal" size={28} color="#C0C0C0" />;
-            case 2: return <Ionicons name="medal" size={28} color="#CD7F32" />;
-            default: return <Text style={styles.rankPosition}>{index + 1}</Text>;
+            case 0: return <View style={styles.rankIconContainer}><Ionicons name="medal" size={28} color="#FFD700" /></View>;
+            case 1: return <View style={styles.rankIconContainer}><Ionicons name="medal" size={28} color="#C0C0C0" /></View>;
+            case 2: return <View style={styles.rankIconContainer}><Ionicons name="medal" size={28} color="#CD7F32" /></View>;
+            default: return <View style={styles.rankIconContainer}><Text style={styles.rankPosition}>{index + 1}</Text></View>;
         }
     };
 
@@ -32,6 +32,12 @@ const RankItem = ({ item, index }) => {
 };
 
 const styles = StyleSheet.create({
+    rankIconContainer: {
+        width: 28,
+        height: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     rankItem: {
         flexDirection: 'row',
         alignItems: 'center',

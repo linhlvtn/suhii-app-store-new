@@ -12,6 +12,7 @@ import TimeFilterSegment from './Statistics/components/TimeFilterSegment';
 import SummaryCard from './Statistics/components/SummaryCard';
 import StatsChart from './Statistics/components/StatsChart';
 import ServicePieChart from './Statistics/components/ServicePieChart';
+import LottieView from 'lottie-react-native';
 
 LocaleConfig.locales['vi'] = { monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'], dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'], today: 'Hôm nay' };
 LocaleConfig.defaultLocale = 'vi';
@@ -40,8 +41,8 @@ const getDateRange = (period, customDate = null) => {
         switch (period) {
             case 'today': startDate = new Date(now); break;
             case 'week':
-                const dayOfWeek = now.getDay(); // 0 for Sunday, 1 for Monday, ..., 6 for Saturday
-                const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday as start of week
+                const dayOfWeek = now.getDay();
+                const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
                 startDate = new Date(now.setDate(diff));
                 endDate = new Date(startDate);
                 endDate.setDate(startDate.getDate() + 6);
@@ -57,19 +58,29 @@ const getDateRange = (period, customDate = null) => {
 };
 
 const getDynamicTitle = (period, date) => {
-    if (period === 'custom' && date) return `Ngày ${date.toLocaleDateString('vi-VN')}`;
     const now = new Date();
-    switch (period) {
-        case 'today': return `Hôm nay, ${now.toLocaleDateString('vi-VN')}`;
-        case 'week':
-            const startOfWeek = getDateRange('week').startDate.toDate();
-            const endOfWeek = new Date(startOfWeek);
-            endOfWeek.setDate(endOfWeek.getDate() + 6);
-            return `Tuần này (${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1} - ${endOfWeek.getDate()}/${endOfWeek.getMonth() + 1})`;
-        case 'month': return `Tháng ${now.getMonth() + 1}, ${now.getFullYear()}`;
-        case 'year': return `Năm ${now.getFullYear()}`;
-        default: return 'Tổng quan';
-    }
+    const titleText = (() => {
+        if (period === 'custom' && date) {
+            return `Ngày ${date.toLocaleDateString('vi-VN')}`;
+        }
+        switch (period) {
+            case 'today':
+                return `Hôm nay, ${now.toLocaleDateString('vi-VN')}`;
+            case 'week': {
+                const startOfWeek = getDateRange('week').startDate.toDate();
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(endOfWeek.getDate() + 6);
+                return `Tuần này (${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1} - ${endOfWeek.getDate()}/${endOfWeek.getMonth() + 1})`;
+            }
+            case 'month':
+                return `Tháng ${now.getMonth() + 1}, ${now.getFullYear()}`;
+            case 'year':
+                return `Năm ${now.getFullYear()}`;
+            default:
+                return 'Tổng quan';
+        }
+    })();
+    return titleText;
 };
 
 const getFormattedDateKey = (date, period) => {
@@ -119,7 +130,6 @@ const initializeDailyData = (startDate, endDate, period) => {
     return data;
 };
 
-
 const EmployeeStatisticsScreen = () => {
     const { userRole, user: authUser } = useAuth();
     const navigation = useNavigation();
@@ -139,7 +149,6 @@ const EmployeeStatisticsScreen = () => {
     const [pieChartData, setPieChartData] = useState([]);
     const [actualRevenue, setActualRevenue] = useState(0);
     const [personalChartData, setPersonalChartData] = useState({ labels: [], datasets: [{ data: [] }] });
-
 
     const handleBackButtonPress = () => {
         if (userRole === 'admin' && route.params?.employeeId) {
@@ -206,18 +215,15 @@ const EmployeeStatisticsScreen = () => {
             });
 
             setReports(fetchedReports);
-
             setSummaryData({
                 totalRevenue: totalRevenue || 0,
                 totalReports: fetchedReports.filter(r => r.status === 'approved').length || 0,
             });
             setActualRevenue(calculatedActualRevenue || 0);
-
             setChartData({
                 labels: Object.keys(dailyRevenueForChart),
                 datasets: [{ data: Object.values(dailyRevenueForChart) }],
             });
-
             setPersonalChartData({
                 labels: Object.keys(dailyRevenueForChart),
                 datasets: [{ data: Object.values(dailyRevenueForChart) }]
@@ -266,15 +272,14 @@ const EmployeeStatisticsScreen = () => {
             pending: { icon: 'time-outline', color: COLORS.pending },
             rejected: { icon: 'close-circle', color: COLORS.rejected }
         };
-        const statusInfo = statusMap[item.status] || { icon: 'help-circle', color: COLORS.gray };
+        const statusInfo = statusMap[item.status] || { icon: 'help-circle', color: COLORS.secondary };
         
         const participants = [];
         if (item.employeeName) participants.push(item.employeeName);
         if (item.partnerName) participants.push(item.partnerName);
         const participantText = participants.length > 0 ? participants.join(' & ') : 'N/A';
 
-        // Doanh thu thực nhận cho từng báo cáo (chỉ hiển thị cho admin)
-        let displayActualReceivedRevenue = '';
+        let actualReceivedRevenueText = null;
         if (userRole === 'admin' && item.status === 'approved') {
              const numParticipants = (item.participantIds && Array.isArray(item.participantIds) && item.participantIds.length > 0) ? item.participantIds.length : 1;
              const reportPrice = item.price || 0;
@@ -286,23 +291,19 @@ const EmployeeStatisticsScreen = () => {
                  actualPerReport = personalShare * 0.10;
              }
              if (actualPerReport > 0) {
-                // Thay thế VNĐ bằng ₫
-                displayActualReceivedRevenue = `Thực nhận: ${actualPerReport.toLocaleString('vi-VN').replace(/VNĐ/g, '₫').trim()}`;
+                actualReceivedRevenueText = actualPerReport.toLocaleString('vi-VN');
              }
         }
 
-        // Định dạng ngày tạo báo cáo
         const formattedCreationDate = item.createdAt ? item.createdAt.toLocaleDateString('vi-VN', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric'
         }) : 'Không rõ';
 
-
         return (
             <TouchableWithoutFeedback>
                 <View style={styles.reportItemContainer}>
-                    {/* Phần ảnh và icon trạng thái trên ảnh */}
                     <View> 
                         <Image
                             source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/default-image.png')}
@@ -313,37 +314,32 @@ const EmployeeStatisticsScreen = () => {
                         </View>
                     </View>
                     
-                    {/* Phần nội dung báo cáo */}
                     <View style={styles.reportItemContent}>
                         <View style={styles.reportItemHeaderInner}>
                             <Text style={styles.reportServiceText} numberOfLines={2}>
                                 {item.service || 'Dịch vụ không xác định'}
                             </Text>
-                            {/* Thêm ngày tạo báo cáo vào đây */}
                             <Text style={styles.reportDateText}>{formattedCreationDate}</Text>
                         </View>
                         
-                        {/* Hiển thị giá và thông tin ngoài giờ */}
                         <View style={styles.reportPriceContainer}>
                             <Text style={styles.reportPriceText}>
-                                {(item.price || 0).toLocaleString('vi-VN').replace(/VNĐ/g, '₫').trim()}
+                                {(item.price || 0).toLocaleString('vi-VN')}₫
                             </Text>
                             {item.isOvertime && (
                                 <Text style={styles.reportOvertimeText}>(+30%)</Text>
                             )}
                         </View>
                         
-                        {/* Dòng doanh thu thực nhận nhỏ phía dưới */}
-                        {displayActualReceivedRevenue ? (
+                        {actualReceivedRevenueText ? (
                             <View style={styles.reportInfoRow}>
                                 <Ionicons name="cash" size={16} color={COLORS.success} />
                                 <Text style={styles.reportActualRevenueText}>
-                                    {displayActualReceivedRevenue}
+                                    {actualReceivedRevenueText}
                                 </Text>
                             </View>
                         ) : null}
                         
-                        {/* Thông tin người làm cùng */}
                         <View style={styles.reportInfoRow}>
                             <Ionicons name="people-outline" size={16} color={COLORS.secondary} />
                             <Text style={styles.reportInfoText}>
@@ -351,15 +347,14 @@ const EmployeeStatisticsScreen = () => {
                             </Text>
                         </View>
                         
-                        {/* Ghi chú */}
-                        {item.note ? (
+                        {item.note && typeof item.note === 'string' && item.note.trim() !== '' && (
                             <View style={styles.reportInfoRow}>
                                 <Ionicons name="document-text-outline" size={16} color={COLORS.secondary} />
                                 <Text style={styles.reportInfoText} numberOfLines={1}>
                                     {item.note}
                                 </Text>
                             </View>
-                        ) : null}
+                        )}
                     </View>
                 </View>
             </TouchableWithoutFeedback>
@@ -368,11 +363,11 @@ const EmployeeStatisticsScreen = () => {
 
     return (
         <View style={styles.container}>
-             <Modal transparent={true} animationType="fade" visible={isDatePickerVisible} onRequestClose={() => setDatePickerVisible(false)}>
-                 <TouchableWithoutFeedback onPress={() => setDatePickerVisible(false)}>
-                     <View style={styles.datePickerBackdrop}>
-                         <TouchableWithoutFeedback>
-                             <View style={styles.datePickerContent}>
+            <Modal transparent={true} animationType="fade" visible={isDatePickerVisible} onRequestClose={() => setDatePickerVisible(false)}>
+                <TouchableWithoutFeedback onPress={() => setDatePickerVisible(false)}>
+                    <View style={styles.datePickerBackdrop}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.datePickerContent}>
                                 <Calendar
                                     current={getSelectedDateString()}
                                     onDayPress={onDayPress}
@@ -384,37 +379,43 @@ const EmployeeStatisticsScreen = () => {
                                         }
                                     }}
                                 />
-                             </View>
-                         </TouchableWithoutFeedback>
-                     </View>
-                 </TouchableWithoutFeedback>
-             </Modal>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
             <View style={styles.header}>
-            <TouchableOpacity onPress={handleBackButtonPress} style={styles.backButton}>
-                <Ionicons name="arrow-back-outline" size={28} color={COLORS.primary} />
-            </TouchableOpacity>
-            <View style={styles.headerTitleContainer}>
-                <Text style={styles.headerLabel}>{userRole === 'admin' && authUser?.uid !== employeeId ? 'Thống kê nhân viên:' : 'Thống kê:'}</Text>
-                <Text style={styles.headerTitle} numberOfLines={1}>{employeeName || 'Nhân viên'}</Text>
-            </View>
-            <View style={{ width: 40 }} />
+                <TouchableOpacity onPress={handleBackButtonPress} style={styles.backButton}>
+                    <Ionicons name="arrow-back-outline" size={28} color={COLORS.primary} />
+                </TouchableOpacity>
+                <View style={styles.headerTitleContainer}>
+                    <Text style={styles.headerLabel}>{userRole === 'admin' && authUser?.uid !== employeeId ? 'Thống kê nhân viên:' : 'Thống kê:'}</Text>
+                    <Text style={styles.headerTitle} numberOfLines={1}>{employeeName || 'Nhân viên'}</Text>
+                </View>
+                <View style={{ width: 40 }} />
             </View>
             <ScrollView contentContainerStyle={styles.scrollContent}>
-                 <View style={styles.subHeader}>
-                     <TouchableOpacity style={styles.titleTouchable} onPress={() => setDatePickerVisible(true)}>
+                <View style={styles.subHeader}>
+                    <TouchableOpacity style={styles.titleTouchable} onPress={() => setDatePickerVisible(true)}>
                         <Text style={styles.subHeaderTitle}>
-                            {loading ? 'Đang tải...' : (getDynamicTitle(selectedPeriod, selectedDate) || 'Tổng quan')}
+                            {loading ? 'Đang tải...' : getDynamicTitle(selectedPeriod, selectedDate)}
                         </Text>
                         <Ionicons name="calendar-outline" size={22} color={COLORS.secondary} style={{ marginLeft: 8 }}/>
                     </TouchableOpacity>
                 </View>
-                 <TimeFilterSegment activeFilter={selectedPeriod} onFilterChange={setSelectedPeriod} style={styles.timeFilterSegmentMargin} />
-                 {loading ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={COLORS.primary} />
+                <TimeFilterSegment activeFilter={selectedPeriod} onFilterChange={setSelectedPeriod} style={styles.timeFilterSegmentMargin} />
+                {loading ? (
+                    <View style={styles.lottieContainer}>
+                        <LottieView
+                            source={require('../../assets/loading.json')}
+                            autoPlay
+                            loop
+                            style={styles.lottieSpinner}
+                        />
+                        <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
                     </View>
-                 ) : (
-                     <>
+                ) : (
+                    <>
                         <View style={styles.summaryCardWrapper}>
                             <SummaryCard
                                 title="Tổng doanh thu cá nhân"
@@ -430,7 +431,7 @@ const EmployeeStatisticsScreen = () => {
                             <View style={styles.summaryCardWrapper}>
                                 <SummaryCard
                                     title="Doanh thu thực nhận"
-                                    value={`${actualRevenue.toLocaleString('vi-VN').replace(/VNĐ/g, '₫').trim()} `}
+                                    value={`${actualRevenue.toLocaleString('vi-VN')}₫`}
                                     description="Dự kiến hoa hồng + thưởng ngoài giờ"
                                     type="actualRevenue"
                                     customCardWidth="100%"
@@ -440,17 +441,15 @@ const EmployeeStatisticsScreen = () => {
                             </View>
                         )}
 
-                        {/* <StatsChart data={chartData} title="Biểu đồ doanh thu theo cá nhân" style={styles.chartCardMargin} /> */}
-                         <StatsChart
+                        <StatsChart
                             data={chartData}
-                            title="Biểu đồ doanh thu theo cá nhân" // Đổi VNĐ sang ₫ (hoặc giữ nguyên nếu đã là ₫)
+                            title="Biểu đồ doanh thu theo cá nhân"
                             style={styles.chartCardMargin}
-                            // Truyền chartType dựa trên selectedPeriod
                             chartType={selectedPeriod === 'today' || selectedPeriod === 'week' || selectedPeriod === 'custom' ? 'bar' : 'line'}
                         />
                         <ServicePieChart data={pieChartData} title="Tỷ lệ dịch vụ theo cá nhân" style={styles.chartCardMargin} />
 
-                        {reports.length > 0 && (
+                        {reports.length > 0 ? (
                             <View style={styles.reportsListSection}>
                                 <Text style={styles.reportsListTitle}>Danh sách báo cáo trong kỳ</Text>
                                 <FlatList
@@ -459,15 +458,14 @@ const EmployeeStatisticsScreen = () => {
                                     renderItem={renderReportItem}
                                     scrollEnabled={false}
                                     ItemSeparatorComponent={() => <View style={styles.reportSeparator} />}
-                                    ListEmptyComponent={() => (
-                                        <View style={styles.emptyReportsContainer}>
-                                            <Text style={styles.emptyReportsText}>Không có báo cáo nào trong kỳ này.</Text>
-                                        </View>
-                                    )}
                                 />
                             </View>
+                        ) : (
+                            <View style={styles.emptyReportsContainer}>
+                                <Text style={styles.emptyReportsText}>Không có báo cáo nào trong kỳ này.</Text>
+                            </View>
                         )}
-                     </>
+                    </>
                 )}
             </ScrollView>
         </View>
@@ -475,37 +473,63 @@ const EmployeeStatisticsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.lightGray, },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Platform.OS === 'android' ? 40 : 50, paddingBottom: 15, paddingHorizontal: 10, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: '#e0e0e0', },
-    backButton: { padding: 5, width: 40, },
-    headerTitleContainer: { alignItems: 'center', flex: 1, marginHorizontal: 10, },
-    headerLabel: { fontSize: 14, color: COLORS.secondary, },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.primary, },
-    scrollContent: { paddingBottom: 20, },
-    subHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10, },
+    container: { flex: 1, backgroundColor: COLORS.lightGray },
+    header: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        paddingTop: Platform.OS === 'android' ? 40 : 50, 
+        paddingBottom: 15, 
+        paddingHorizontal: 10, 
+        backgroundColor: COLORS.white, 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#e0e0e0' 
+    },
+    backButton: { padding: 5, width: 40 },
+    headerTitleContainer: { alignItems: 'center', flex: 1, marginHorizontal: 10 },
+    headerLabel: { fontSize: 14, color: COLORS.secondary },
+    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.primary },
+    scrollContent: { paddingBottom: 20 },
+    subHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
     timeFilterSegmentMargin: { marginHorizontal: 20, marginBottom: 15 },
-    titleTouchable: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', },
-    subHeaderTitle: { fontSize: 18, fontWeight: '600', color: COLORS.secondary, },
-    loadingContainer: { height: 400, justifyContent: 'center', alignItems: 'center', },
-    datePickerBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', padding: 20, },
-    datePickerContent: { backgroundColor: COLORS.white, borderRadius: 15, padding: 5, width: '100%', maxWidth: 350, shadowColor: "#000", shadowOffset: { width: 0, height: 2, }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5, },
-
+    titleTouchable: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
+    subHeaderTitle: { fontSize: 18, fontWeight: '600', color: COLORS.secondary },
+    loadingContainer: { height: 400, justifyContent: 'center', alignItems: 'center' },
+    datePickerBackdrop: { 
+        flex: 1, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        backgroundColor: 'rgba(0,0,0,0.5)', 
+        padding: 20 
+    },
+    datePickerContent: { 
+        backgroundColor: COLORS.white, 
+        borderRadius: 15, 
+        padding: 5, 
+        width: '100%', 
+        maxWidth: 350, 
+        shadowColor: "#000", 
+        shadowOffset: { width: 0, height: 2 }, 
+        shadowOpacity: 0.25, 
+        shadowRadius: 4, 
+        elevation: 5 
+    },
     summaryCardWrapper: {
         marginHorizontal: 20,
         marginBottom: 10,
     },
-
     reportsListSection: {
         backgroundColor: COLORS.white,
         borderRadius: 12,
         marginHorizontal: 20,
         marginBottom: 20,
+        marginTop: 30,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 3,
-        paddingTop: 0,
+        paddingTop: 15,
     },
     reportsListTitle: {
         fontSize: 18,
@@ -513,7 +537,6 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
         marginBottom: 15,
         paddingHorizontal: 15,
-        paddingTop: 15,
     },
     reportItemContainer: {
         flexDirection: 'row',
@@ -554,7 +577,7 @@ const styles = StyleSheet.create({
         flex: 1,
         marginRight: 5,
     },
-    reportDateText: { // Style mới cho ngày tạo báo cáo
+    reportDateText: {
         fontSize: 13,
         color: COLORS.secondary,
         fontWeight: '500',
@@ -592,19 +615,6 @@ const styles = StyleSheet.create({
         color: COLORS.secondary,
         flexShrink: 1,
     },
-    reportStatusBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 15,
-        backgroundColor: COLORS.lightGray,
-    },
-    reportStatusText: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        marginLeft: 4,
-    },
     reportSeparator: {
         height: 1,
         backgroundColor: '#f0f0f0',
@@ -613,6 +623,10 @@ const styles = StyleSheet.create({
     emptyReportsContainer: {
         padding: 20,
         alignItems: 'center',
+        backgroundColor: COLORS.white,
+        borderRadius: 12,
+        marginHorizontal: 20,
+        marginTop: 30,
     },
     emptyReportsText: {
         fontSize: 15,
@@ -621,7 +635,23 @@ const styles = StyleSheet.create({
     chartCardMargin: {
         marginHorizontal: 20,
         marginBottom: 20,
-    }
+    },
+    lottieContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: 300,
+        backgroundColor: COLORS.lightGray,
+    },
+    lottieSpinner: {
+        width: 150,
+        height: 150,
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: COLORS.secondary,
+    },
 });
 
 export default EmployeeStatisticsScreen;

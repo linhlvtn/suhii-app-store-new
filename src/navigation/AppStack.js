@@ -1,10 +1,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Image, Alert, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, getFocusedRouteNameFromRoute } from '@react-navigation/native';
-import { MenuProvider } from 'react-native-popup-menu';
 
 // Import các màn hình
 import StoreScreen from '../screens/StoreScreen';
@@ -61,12 +60,12 @@ function MainTabs() {
                 component={StoreScreen} 
                 options={{ 
                     tabBarIcon: ({ color, size }) => (<Ionicons name="home-outline" color={color} size={size} />),
+                    tabBarLabel: ({ color }) => (<Text style={{ color, fontSize: 12 }}>Trang chủ</Text>)
                 }} 
             />
             <Tab.Screen 
                 name="CreateReportTab" 
-                // --- SỬA LỖI Ở ĐÂY ---
-                component={EmptyComponent} // <-- Sử dụng component đã được định nghĩa
+                component={EmptyComponent}
                 options={{
                     tabBarLabel: () => null,
                     tabBarButton: (props) => (
@@ -80,6 +79,7 @@ function MainTabs() {
                 component={StatisticsScreen} 
                 options={{ 
                     tabBarIcon: ({ color, size }) => (<Ionicons name="stats-chart-outline" color={color} size={size} />),
+                    tabBarLabel: ({ color }) => (<Text style={{ color, fontSize: 12 }}>Thống kê</Text>)
                 }} 
             />
         </Tab.Navigator>
@@ -88,21 +88,19 @@ function MainTabs() {
 
 export default function AppStack() {
     return (
-        <MenuProvider>
-            <Stack.Navigator>
-                <Stack.Screen 
-                    name="MainTabs" 
-                    component={MainTabs} 
-                    options={{ 
-                        headerShown: false,
-                    }}
-                />
-                <Stack.Screen name="CreateReport" component={CreateReportScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="EditReport" component={EditReportScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="EmployeeStatistics" component={EmployeeStatisticsScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="Notification" component={NotificationScreen} options={{ headerShown: false }} />
-            </Stack.Navigator>
-        </MenuProvider>
+        <Stack.Navigator>
+            <Stack.Screen 
+                name="MainTabs" 
+                component={MainTabs} 
+                options={{ 
+                    headerShown: false,
+                }}
+            />
+            <Stack.Screen name="CreateReport" component={CreateReportScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="EditReport" component={EditReportScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="EmployeeStatistics" component={EmployeeStatisticsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Notification" component={NotificationScreen} options={{ headerShown: false }} />
+        </Stack.Navigator>
     );
 }
 

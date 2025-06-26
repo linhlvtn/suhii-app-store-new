@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native'; // Import useNavigation
 import { Picker } from '@react-native-picker/picker';
+import LottieView from 'lottie-react-native';
 
 // --- Hằng số màu sắc ---
 // Import từ theme.js nếu có
@@ -314,6 +315,21 @@ const EditReportScreen = () => {
         );
     }
 
+     if (isFetchingData || loadingUsers) { // Trong EditReportScreen
+    // hoặc if (uploading) { // Trong CreateReportScreen (nếu bạn chỉ muốn lottie cho uploading)
+        return (
+            <View style={styles.loadingOverlayContainer}> {/* Style mới */}
+                <LottieView
+                    source={require('../../assets/loading.json')} // Thay đổi đường dẫn
+                    autoPlay
+                    loop
+                    style={styles.loadingOverlayLottie}
+                />
+                <Text style={styles.loadingOverlayText}>Đang tải dữ liệu...</Text> {/* Hoặc "Đang xử lý..." */}
+            </View>
+        );
+    }
+
     return (
         <View style={[styles.fullScreenContainer, { paddingTop: insets.top }]}>
             <StatusBar style="dark" />
@@ -327,8 +343,13 @@ const EditReportScreen = () => {
 
             <Modal transparent={true} animationType="fade" visible={uploading}>
                 <View style={styles.modalBackground}>
-                    <ActivityIndicator size="large" color="#ffffff" />
-                    <Text style={styles.loadingText}>Đang cập nhật...</Text>
+                    <LottieView
+                        source={require('../../assets/loading.json')} // Thay đổi đường dẫn
+                        autoPlay
+                        loop
+                        style={styles.modalLottie} // Style cho lottie trong modal
+                    />
+                    <Text style={styles.modalLoadingText}>Đang cập nhật...</Text>
                 </View>
             </Modal>
 
@@ -570,6 +591,38 @@ const styles = StyleSheet.create({
     modalDoneButton: { backgroundColor: COLORS.primary, borderRadius: 10, padding: 15, alignItems: 'center' },
     modalDoneButtonText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
     pickerItemText: { color: COLORS.black, fontSize: 18 },
+
+    loadingOverlayContainer: { // Style cho màn hình loading overlay toàn bộ
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: COLORS.lightGray, // Màu nền của loading screen
+    },
+    loadingOverlayLottie: {
+        width: 150, // Kích thước của animation
+        height: 150,
+    },
+    loadingOverlayText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: COLORS.secondary,
+    },
+    // Đối với modal loading khi submit
+    modalBackground: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    },
+    modalLottie: { // Style cho lottie trong modal
+        width: 100, // Nhỏ hơn một chút so với full screen loading
+        height: 100,
+    },
+    modalLoadingText: { // Style cho text loading trong modal
+        color: COLORS.white,
+        marginTop: 15,
+        fontSize: 16,
+    },
 });
 
 export default EditReportScreen;
