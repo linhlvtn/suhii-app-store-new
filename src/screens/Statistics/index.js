@@ -1,434 +1,3 @@
-// // src/screens/Statistics/index.js
-
-// import React, { useState, useEffect, useCallback } from 'react';
-// import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Alert, Platform, Image, FlatList } from 'react-native';
-// import { collection, query, where, getDocs, Timestamp, onSnapshot, orderBy } from 'firebase/firestore';
-// import { Calendar, LocaleConfig } from 'react-native-calendars';
-// import { Ionicons } from '@expo/vector-icons';
-// import { useNavigation, useFocusEffect } from '@react-navigation/native';
-// import { db, auth } from '../../../firebaseConfig';
-// import { useAuth } from '../../context/AuthContext';
-
-// import TimeFilterSegment from './components/TimeFilterSegment';
-// import SummaryCard from './components/SummaryCard';
-// import StatsChart from './components/StatsChart';
-// import RankItem from './components/RankItem';
-// import ServicePieChart from './components/ServicePieChart';
-
-// LocaleConfig.locales['vi'] = {
-//   monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
-//   dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'],
-//   dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'],
-//   today: 'Hôm nay'
-// };
-// LocaleConfig.defaultLocale = 'vi';
-
-// const COLORS = {
-//     primary: '#1a1a1a',
-//     secondary: '#555',
-//     white: '#FFFFFF',
-//     lightGray: '#f0f2f5',
-//     success: '#28a745',
-//     danger: '#D32F2F',
-//     black: '#1a1a1a',
-// };
-
-// const getDateRange = (period, customDate = null) => {
-//     const now = new Date();
-//     let startDate = new Date(now), endDate = new Date(now);
-
-//     if (period === 'custom' && customDate) {
-//         startDate = new Date(customDate);
-//         endDate = new Date(customDate);
-//     } else {
-//         switch (period) {
-//             case 'today': break;
-//             case 'week':
-//                 const dayOfWeek = now.getDay();
-//                 const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-//                 startDate = new Date(now.setDate(diff));
-//                 break;
-//             case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
-//             case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
-//             default: startDate = new Date(now);
-//         }
-//     }
-//     startDate.setHours(0, 0, 0, 0);
-//     endDate.setHours(23, 59, 59, 999);
-//     return { startDate: Timestamp.fromDate(startDate), endDate: Timestamp.fromDate(endDate) };
-// };
-
-// const getDynamicTitle = (period, date) => {
-//     if (period === 'custom' && date) return `Ngày ${date.toLocaleDateString('vi-VN')}`;
-//     const now = new Date();
-//     switch (period) {
-//         case 'today': return `Hôm nay, ${now.toLocaleDateString('vi-VN')}`;
-//         case 'week':
-//             const startOfWeek = getDateRange('week').startDate.toDate();
-//             const endOfWeek = new Date(startOfWeek);
-//             endOfWeek.setDate(endOfWeek.getDate() + 6);
-//             return `Tuần này (${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1} - ${endOfWeek.getDate()}/${endOfWeek.getMonth() + 1})`;
-//         case 'month': return `Tháng ${now.getMonth() + 1}, ${now.getFullYear()}`;
-//         case 'year': return `Năm ${now.getFullYear()}`;
-//         default: return 'Tổng quan';
-//     }
-// };
-
-// const AdminStatisticsDashboard = () => {
-//     const { user } = useAuth();
-//     const [activeFilter, setActiveFilter] = useState('today');
-//     const [loading, setLoading] = useState(true);
-//     const [dynamicTitle, setDynamicTitle] = useState('');
-//     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
-//     const [customDate, setCustomDate] = useState(new Date());
-
-//     const [adminPersonalSummary, setAdminPersonalSummary] = useState({ totalRevenue: 0, totalReports: 0 });
-//     const [storeSummary, setStoreSummary] = useState({ totalRevenue: 0, revenueChange: 0, totalClients: 0, clientsChange: 0 });
-    
-//     const [chartData, setChartData] = useState({ labels: [], datasets: [{ data: [] }] });
-//     const [clientChartData, setClientChartData] = useState({ labels: [], datasets: [{ data: [] }] });
-//     const [personalChartData, setPersonalChartData] = useState({ labels: [], datasets: [{ data: [] }] });
-
-//     const [leaderboard, setLeaderboard] = useState([]);
-//     const [pieChartData, setPieChartData] = useState([]);
-//     const navigation = useNavigation();
-
-//     const HeaderLogo = () => (<Image source={require('../../../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />);
-//     const HeaderLogoutButton = () => {
-//         const handleSignOut = () => { Alert.alert("Xác nhận Đăng xuất", "Bạn có chắc muốn đăng xuất?", [{ text: "Hủy" }, { text: "Đăng xuất", onPress: () => auth.signOut(), style: "destructive" }]); };
-//         return (<TouchableOpacity onPress={handleSignOut} style={styles.headerButton}><Ionicons name="log-out-outline" size={28} color={COLORS.black} /></TouchableOpacity>);
-//     };
-
-//     const getFormattedDateKey = (date, period) => {
-//         switch (period) {
-//             case 'today':
-//             case 'custom':
-//                 // VD: 08:00 (nếu bạn muốn theo giờ) hoặc giữ nguyên ngày nếu muốn theo ngày
-//                 // Nếu muốn theo giờ, bạn cần làm tròn timestamp của Firebase về giờ gần nhất
-//                 return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-//             case 'week':
-//                 // VD: T2, 24/06
-//                 return date.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
-//             case 'month':
-//                 // VD: 24/06
-//                 return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-//             case 'year':
-//                 // VD: 06/2024
-//                 return date.toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' });
-//             default:
-//                 return date.toLocaleDateString('vi-VN');
-//         }
-//     };
-    
-//     // Hàm này được tối ưu để tạo các điểm dữ liệu liên tục cho trục X
-//     const initializeDailyData = (startDate, endDate, period) => {
-//         const data = {};
-//         let currentDate = new Date(startDate);
-//         currentDate.setHours(0,0,0,0); // Đảm bảo bắt đầu từ đầu ngày
-
-//         if (period === 'today' || period === 'custom') {
-//             // Với "today" hoặc "custom" (một ngày cụ thể), chúng ta sẽ tạo 24 điểm dữ liệu (mỗi giờ 1 điểm)
-//             for (let i = 0; i < 24; i++) {
-//                 let hourDate = new Date(startDate);
-//                 hourDate.setHours(i, 0, 0, 0);
-//                 data[getFormattedDateKey(hourDate, 'today')] = 0;
-//             }
-//         } else if (period === 'week') {
-//             // Đối với "week", tạo 7 điểm dữ liệu (mỗi ngày 1 điểm trong tuần)
-//             for (let i = 0; i < 7; i++) {
-//                 let dayDate = new Date(startDate);
-//                 dayDate.setDate(dayDate.getDate() + i);
-//                 data[getFormattedDateKey(dayDate, 'week')] = 0;
-//             }
-//         } else if (period === 'month') {
-//             // Đối với "month", tạo các điểm dữ liệu cho mỗi ngày trong tháng
-//             while (currentDate.getMonth() === startDate.getMonth() && currentDate <= endDate) {
-//                 data[getFormattedDateKey(currentDate, 'month')] = 0;
-//                 currentDate.setDate(currentDate.getDate() + 1);
-//             }
-//         } else if (period === 'year') {
-//             // Đối với "year", tạo 12 điểm dữ liệu (mỗi tháng 1 điểm)
-//             for (let i = 0; i < 12; i++) {
-//                 let monthDate = new Date(startDate.getFullYear(), i, 1);
-//                 data[getFormattedDateKey(monthDate, 'year')] = 0;
-//             }
-//         }
-//         return data;
-//     };
-
-
-//     const fetchStatisticsData = useCallback(async () => {
-//         if (!user) return;
-
-//         setLoading(true);
-//         const currentRange = getDateRange(activeFilter, customDate);
-//         const diff = currentRange.endDate.toDate().getTime() - currentRange.startDate.toDate().getTime();
-//         const prevEndDate = new Date(currentRange.startDate.toDate().getTime() - 1);
-//         const prevStartDate = new Date(prevEndDate.getTime() - diff);
-//         const previousRange = { startDate: Timestamp.fromDate(prevStartDate), endDate: Timestamp.fromDate(prevEndDate) };
-
-//         const getReportsInRange = async (range, userId = null) => {
-//             try {
-//                 let qRef = collection(db, "reports");
-//                 let conditions = [where("status", "==", "approved"), where("createdAt", ">=", range.startDate), where("createdAt", "<=", range.endDate)];
-                
-//                 if (userId) {
-//                     conditions.push(where("participantIds", "array-contains", userId));
-//                 }
-
-//                 const q = query(qRef, ...conditions, orderBy("createdAt", "asc"));
-//                 const querySnapshot = await getDocs(q);
-//                 return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
-//             } catch (e) {
-//                 console.error("Lỗi khi lấy báo cáo đã duyệt:", e);
-//                 if (e.code === 'failed-precondition') {
-//                     Alert.alert("Lỗi Cấu Hình", "Cơ sở dữ liệu của bạn thiếu chỉ mục cần thiết. Vui lòng kiểm tra console Firebase để tạo chỉ mục cho: reports collection, status, createdAt, participantIds.");
-//                 }
-//                 return [];
-//             }
-//         };
-
-//         try {
-//             const [currentStoreReports, previousStoreReports] = await Promise.all([
-//                 getReportsInRange(currentRange),
-//                 getReportsInRange(previousRange)
-//             ]);
-
-//             const currentAdminReports = await getReportsInRange(currentRange, user.uid);
-
-//             processData(currentStoreReports, previousStoreReports, currentRange.startDate.toDate(), currentRange.endDate.toDate(), activeFilter);
-//             processAdminPersonalData(currentAdminReports);
-//             processAdminPersonalDataForChart(currentAdminReports, currentRange.startDate.toDate(), currentRange.endDate.toDate(), activeFilter);
-//             setDynamicTitle(getDynamicTitle(activeFilter, customDate));
-//         } catch (error) {
-//             console.error("Lỗi fetchStatisticsData:", error);
-//         } finally {
-//             setLoading(false);
-//         }
-//     }, [activeFilter, customDate, user]);
-
-//     const processAdminPersonalData = (reports) => {
-//         let totalRevenue = 0;
-//         let totalReports = 0;
-    
-//         reports.forEach(report => {
-//             if (report.status === 'approved') {
-//                 const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
-//                 const revenuePerThisAdmin = (report.userId === user?.uid || report.partnerId === user?.uid) ? (report.price || 0) / numParticipants : 0;
-                
-//                 totalRevenue += revenuePerThisAdmin;
-//                 totalReports += 1;
-//             }
-//         });
-//         setAdminPersonalSummary({ totalRevenue, totalReports });
-//     };
-
-//     const processAdminPersonalDataForChart = (reports, startDate, endDate, period) => {
-//         const dailyData = initializeDailyData(startDate, endDate, period); // Sử dụng hàm khởi tạo
-    
-//         reports.forEach(report => {
-//             const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
-//             const revenuePerThisAdmin = (report.userId === user?.uid || report.partnerId === user?.uid) ? (report.price || 0) / numParticipants : 0;
-    
-//             let dateKey = getFormattedDateKey(report.createdAt, period);
-//             if (dailyData[dateKey] !== undefined) {
-//                 dailyData[dateKey] += revenuePerThisAdmin / 1000000;
-//             }
-//         });
-    
-//         setPersonalChartData({
-//             labels: Object.keys(dailyData),
-//             datasets: [{ data: Object.values(dailyData) }]
-//         });
-//     };
-
-//     const processData = (currentReports, previousReports, startDate, endDate, period) => {
-//         // Overall Store Statistics
-//         const currentStoreRevenue = currentReports.reduce((sum, report) => sum + (report.price || 0), 0);
-//         const currentStoreClients = new Set(currentReports.map(report => report.id)).size;
-//         const previousStoreRevenue = previousReports.reduce((sum, report) => sum + (report.price || 0), 0);
-//         const previousStoreClients = new Set(previousReports.map(report => report.id)).size;
-
-//         const revenueChange = previousStoreRevenue > 0 ? ((currentStoreRevenue - previousStoreRevenue) / previousStoreRevenue) * 100 : (currentStoreRevenue > 0 ? 100 : 0);
-//         const clientsChange = previousStoreClients > 0 ? ((currentStoreClients - previousStoreClients) / previousStoreClients) * 100 : (currentStoreClients > 0 ? 100 : 0);
-//         setStoreSummary({ totalRevenue: currentStoreRevenue, revenueChange: parseFloat(revenueChange.toFixed(1)), totalClients: currentStoreClients, clientsChange: parseFloat(clientsChange.toFixed(1)) });
-    
-//         // Chart Data (Daily Revenue for the store) - For the larger StatsChart AND SummaryCard sparkline
-//         const dailyRevenue = initializeDailyData(startDate, endDate, period); // Sử dụng hàm khởi tạo
-//         currentReports.forEach(report => {
-//             let dateKey = getFormattedDateKey(report.createdAt, period);
-//             if (dailyRevenue[dateKey] !== undefined) {
-//                 dailyRevenue[dateKey] += (report.price || 0) / 1000000;
-//             }
-//         });
-//         setChartData({ labels: Object.keys(dailyRevenue), datasets: [{ data: Object.values(dailyRevenue) }] });
-
-//         // Client Chart Data (Sparkline for Total Clients)
-//         const dailyClients = initializeDailyData(startDate, endDate, period); // Sử dụng hàm khởi tạo
-//         currentReports.forEach(report => {
-//             let dateKey = getFormattedDateKey(report.createdAt, period);
-//             if (dailyClients[dateKey] !== undefined) {
-//                 dailyClients[dateKey] += 1;
-//             }
-//         });
-//         setClientChartData({ labels: Object.keys(dailyClients), datasets: [{ data: Object.values(dailyClients) }] });
-
-//         // Leaderboard (Employee Performance) - (Giữ nguyên)
-//         const employeeData = currentReports.reduce((acc, report) => {
-//             const { employeeName, userId, price, partnerId, partnerName } = report;
-//             const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
-//             const revenueShare = (price || 0) / numParticipants;
-
-//             if (userId) {
-//                 if (!acc[userId]) acc[userId] = { id: userId, name: employeeName, revenue: 0, clients: 0 };
-//                 acc[userId].revenue += revenueShare;
-//                 acc[userId].clients += 1;
-//             }
-//             if (partnerId && partnerId !== userId) {
-//                 if (!acc[partnerId]) acc[partnerId] = { id: partnerId, name: partnerName || 'Không rõ', revenue: 0, clients: 0 };
-//                 acc[partnerId].revenue += revenueShare;
-//             }
-//             return acc;
-//         }, {});
-//         setLeaderboard(Array.from(Object.values(employeeData)).sort((a, b) => b.revenue - a.revenue));
-    
-//         // Service Pie Chart Data (Overall store services) - (Giữ nguyên)
-//         const serviceCounts = currentReports.reduce((acc, report) => {
-//             const serviceNames = (report.service || 'Không xác định').split(',').map(s => s.trim());
-//             serviceNames.forEach(serviceName => { acc[serviceName] = (acc[serviceName] || 0) + 1; });
-//             return acc;
-//         }, {});
-//         const pieColors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6'];
-//         const pieData = Object.keys(serviceCounts).map((service, index) => ({
-//             name: service,
-//             population: serviceCounts[service],
-//             color: pieColors[index % pieColors.length],
-//             legendFontColor: COLORS.secondary,
-//             legendFontSize: 15
-//         }));
-//         setPieChartData(pieData);
-//     };
-
-//     useFocusEffect(useCallback(() => { fetchStatisticsData(); }, [fetchStatisticsData]));
-//     const onDayPress = (day) => { const newDate = new Date(day.dateString + 'T00:00:00'); setDatePickerVisible(false); setCustomDate(newDate); setActiveFilter('custom'); };
-//     const handleFilterChange = (filter) => { setActiveFilter(filter); if(filter !== 'custom') { setCustomDate(new Date()); } };
-//     const getSelectedDateString = () => { const year = customDate.getFullYear(); const month = String(customDate.getMonth() + 1).padStart(2, '0'); const day = String(customDate.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; };
-//     const handleRankItemPress = (item) => { navigation.navigate('EmployeeStatistics', { employeeId: item.id, employeeName: item.name }); };
-
-//     return (
-//         <View style={styles.container}>
-//             <View style={styles.header}>
-//                 <View style={{ width: 100 }} />
-//                 <HeaderLogo />
-//                 <View style={styles.headerRightContainer}>
-//                     <HeaderLogoutButton />
-//                 </View>
-//             </View>
-//             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-//                 <View style={styles.subHeader}>
-//                     <Text style={styles.headerLabel}>Tổng quan</Text>
-//                     <TouchableOpacity style={styles.titleTouchable} onPress={() => setDatePickerVisible(true)}>
-//                         <Text style={styles.headerTitle}>{loading ? 'Đang tải...' : (dynamicTitle || 'Tổng quan')}</Text>
-//                         <Ionicons name="calendar-outline" size={24} color={COLORS.primary} style={{ marginLeft: 8 }}/>
-//                     </TouchableOpacity>
-//                 </View>
-//                 <TimeFilterSegment activeFilter={activeFilter} onFilterChange={handleFilterChange} />
-//                 {loading ? (<View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>) : (
-//                     <>
-//                         {/* Thẻ thống kê tổng quát của CỬA HÀNG */}
-//                         <Text style={styles.sectionHeading}>Thống kê tổng cửa hàng</Text>
-//                         <View style={styles.summaryCardsRow}> {/* Sử dụng style mới cho hàng card */}
-//                             <SummaryCard
-//                                 title="Tổng Doanh thu"
-//                                 totalRevenue={storeSummary.totalRevenue}
-//                                 change={storeSummary.revenueChange}
-//                                 type="storeSummary"
-//                                 chartData={chartData}
-//                                 isDailyReport={activeFilter === 'today' || activeFilter === 'custom'} // Truyền prop này
-//                             />
-//                             <SummaryCard
-//                                 title="Tổng Lượt khách"
-//                                 value={storeSummary.totalClients.toString()}
-//                                 change={storeSummary.clientsChange}
-//                                 icon="people-outline"
-//                                 color="#3498db"
-//                                 type="storeClients"
-//                                 chartData={clientChartData}
-//                                 isDailyReport={activeFilter === 'today' || activeFilter === 'custom'} // Truyền prop này
-//                             />
-//                         </View>
-
-//                         {/* Biểu đồ Doanh thu của CỬA HÀNG (StatsChart lớn) */}
-//                         <StatsChart data={chartData} title="Biểu đồ Doanh thu (triệu VNĐ) toàn cửa hàng" style={styles.chartCard} /> {/* Áp dụng style */}
-//                         <ServicePieChart data={pieChartData} title="Tỉ lệ Dịch vụ toàn cửa hàng" style={styles.chartCard} /> {/* Áp dụng style */}
-
-//                         {/* Thẻ thống kê CÁ NHÂN CỦA ADMIN */}
-//                         {adminPersonalSummary.totalReports > 0 && (
-//                             <>
-//                                 <Text style={styles.sectionHeading}>Thống kê cá nhân của Admin</Text>
-//                                 <View style={styles.summaryCardsRow}>
-//                                     <SummaryCard
-//                                         title="Doanh thu cá nhân của bạn"
-//                                         totalRevenue={adminPersonalSummary.totalRevenue}
-//                                         totalReports={adminPersonalSummary.totalReports}
-//                                         chartData={personalChartData}
-//                                         isDailyReport={activeFilter === 'today' || activeFilter === 'custom'} // Truyền prop này
-//                                         customCardWidth="100%" // Đặt width 100% cho card này
-//                                     />
-//                                 </View>
-//                             </>
-//                         )}
-
-//                         <View style={styles.leaderboardContainer}>
-//                             <Text style={styles.sectionTitle}>Hiệu suất Nhân viên</Text>
-//                             {leaderboard && leaderboard.length > 0 ? (
-//                                 leaderboard.map((item, index) => (
-//                                     <TouchableOpacity key={item.id || index} onPress={() => handleRankItemPress(item)}>
-//                                         <RankItem item={item} index={index} />
-//                                     </TouchableOpacity>
-//                                 ))
-//                             ) : (<View style={styles.noDataContainer}><Text style={styles.noDataText}>Không có dữ liệu nhân viên.</Text></View>)}
-//                         </View>
-//                     </>
-//                 )}
-//             </ScrollView>
-//             <Modal transparent={true} animationType="fade" visible={isDatePickerVisible} onRequestClose={() => setDatePickerVisible(false)}>
-//                 <TouchableWithoutFeedback onPress={() => setDatePickerVisible(false)}>
-//                     <View style={styles.datePickerBackdrop}><TouchableWithoutFeedback>
-//                         <View style={styles.datePickerContent}>
-//                             <Calendar current={getSelectedDateString()} onDayPress={onDayPress} markedDates={{ [getSelectedDateString()]: {selected: true, disableTouchEvent: true, selectedColor: COLORS.primary} }} />
-//                         </View>
-//                     </TouchableWithoutFeedback></View>
-//                 </TouchableWithoutFeedback>
-//             </Modal>
-//         </View>
-//     );
-// };
-
-// const StatisticsScreen = () => {
-//     const { user, userRole, initializing } = useAuth();
-//     const navigation = useNavigation();
-
-//     useEffect(() => {
-//         if (!initializing && userRole === 'employee' && user) {
-//             navigation.replace('EmployeeStatistics', {
-//                 employeeId: user.uid,
-//                 employeeName: user.displayName || user.email.split('@')[0],
-//             });
-//         }
-//     }, [initializing, userRole, user, navigation]);
-
-//     if (initializing || userRole === 'employee') {
-//         return (<View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>);
-//     }
-    
-//     if (userRole === 'admin') {
-//         return <AdminStatisticsDashboard />;
-//     }
-
-//     return <View style={styles.container}><Text>Vai trò người dùng không hợp lệ.</Text></View>;
-// };
-
 // src/screens/Statistics/index.js
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -445,6 +14,7 @@ import SummaryCard from './components/SummaryCard';
 import StatsChart from './components/StatsChart';
 import RankItem from './components/RankItem';
 import ServicePieChart from './components/ServicePieChart';
+import LottieView from 'lottie-react-native';
 
 LocaleConfig.locales['vi'] = {
   monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
@@ -831,8 +401,13 @@ const AdminStatisticsDashboard = () => {
                 </View>
                 <TimeFilterSegment activeFilter={activeFilter} onFilterChange={handleFilterChange} />
                 {loading ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={COLORS.primary} />
+                    <View style={styles.lottieContainer}>
+                        <LottieView
+                            source={require('../../../assets/loading.json')}
+                            autoPlay
+                            loop
+                            style={styles.lottieSpinner}
+                        />
                         <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
                     </View>
                 ) : (
@@ -1001,7 +576,7 @@ const styles = StyleSheet.create({
     },
 
     leaderboardContainer: {
-        marginTop: 15, // Giảm khoảng cách để đồng nhất
+        marginTop: 25, // Giảm khoảng cách để đồng nhất
         marginHorizontal: 20, // Khoảng cách lề đồng nhất
         backgroundColor: COLORS.white, // Thêm nền trắng cho leaderboard
         borderRadius: 12, // Bo góc cho leaderboard
@@ -1044,7 +619,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        height: 300, // Chiều cao cố định để lottie hiển thị tốt trong không gian loading
+        height: 350, // Chiều cao cố định để lottie hiển thị tốt trong không gian loading
         backgroundColor: COLORS.lightGray,
     },
     lottieSpinner: { // Style cho animation lottie
@@ -1052,10 +627,10 @@ const styles = StyleSheet.create({
         height: 150,
     },
     loadingText: { // Style cho text loading
-        marginTop: 10,
+        marginTop: 0,
         fontSize: 16,
         color: COLORS.secondary,
-    }
+    },
 });
 
 export default StatisticsScreen;

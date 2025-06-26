@@ -1,241 +1,177 @@
-// // // functions/index.js
+// functions/index.js (Ví dụ cơ bản)
 
-// // functions/index.js
+const functions = require("firebase-functions");
+const admin = require("firebase-admin");
 
-// const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
-// const { getFirestore, Timestamp } = require("firebase-admin/firestore");
-// const { initializeApp } = require("firebase-admin/app");
-// const logger = require("firebase-functions/logger");
+admin.initializeApp();
+const db = admin.firestore();
 
-// // Khởi tạo Firebase Admin
-// initializeApp();
+// 1. Cập nhật vai trò người dùng
+exports.updateUserRole = functions.https.onCall(async (data, context) => {
+  // Chỉ cho phép admin thực hiện
+  if (context.auth.token.role !== "admin") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Chỉ admin mới có thể cập nhật vai trò."
+    );
+  }
 
-// /**
-//  * Tạo một bản ghi thông báo trong collection 'notifications'
-//  * cho tất cả người dùng có vai trò 'admin'.
-//  * Kích hoạt khi có báo cáo mới được tạo.
-//  */
-// exports.createAdminNotificationOnNewReport = onDocumentCreated("reports/{reportId}", async (event) => {
-//   logger.info("Triggered: New report created, ID:", event.params.reportId);
+  const { uid, role } = data;
 
-//   const newReport = event.data.data();
+  if (!uid || !role || (role !== "admin" && role !== "employee")) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "UID hoặc vai trò không hợp lệ."
+    );
+  }
 
-//   // Chỉ tạo thông báo nếu báo cáo đang ở trạng thái "chờ duyệt"
-//   if (newReport.status !== "pending") {
-//     logger.info("Báo cáo không ở trạng thái 'pending', bỏ qua.");
-//     return null;
-//   }
+  try {
+    // Cập nhật vai trò trong Custom Claims (Firebase Auth)
+    await admin.auth().setCustomUserClaims(uid, { role: role });
 
-//   const employeeName = newReport.employeeName || "Một nhân viên";
-//   const db = getFirestore();
+    // Cập nhật vai trò trong Firestore (cho mục đích dễ query)
+    await db.collection("users").doc(uid).update({ role: role });
 
-//   try {
-//     // Tìm tất cả các admin
-//     const adminQuery = db.collection("users").where("role", "==", "admin");
-//     const adminSnapshot = await adminQuery.get();
+    // Tùy chọn: Lấy lại thông tin user để cập nhật lại displayName nếu muốn
+    const userRecord = await admin.auth().getUser(uid);
 
-//     if (adminSnapshot.empty) {
-//       logger.info("Không tìm thấy tài khoản admin nào để tạo thông báo.");
-//       return null;
-//     }
+    return {
+      success: true,
+      message: `Vai trò của người dùng ${uid} đã được cập nhật thành ${role}.`,
+      displayName: userRecord.displayName, // Trả về displayName để cập nhật trên UI
+    };
+  } catch (error) {
+    console.error("Lỗi cập nhật vai trò:", error);
+    throw new functions.https.HttpsError(
+      "internal",
+      `Không thể cập nhật vai trò: ${error.message}`
+    );
+  }
+});
 
-//     // Tạo một batch để ghi nhiều document cùng lúc cho hiệu quả
-//     const batch = db.batch();
-//     const notificationPayload = {
-//         title: "Báo cáo mới cần duyệt",
-//         body: `${employeeName} vừa tạo một báo cáo mới.`,
-//         createdAt: Timestamp.now(),
-//         read: false,
-//     };
+// 2. Xóa người dùng và dữ liệu liên quan
+exports.deleteUser = functions.https.onCall(async (data, context) => {
+  // Chỉ cho phép admin thực hiện và không được tự xóa chính mình
+  if (context.auth.token.role !== "admin" || context.auth.uid === data.uid) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Chỉ admin mới có thể xóa người dùng khác."
+    );
+  }
 
-//     adminSnapshot.forEach((adminDoc) => {
-//         const adminId = adminDoc.id;
-//         const notificationRef = db.collection("notifications").doc(); // Tạo một ID ngẫu nhiên
-//         batch.set(notificationRef, {
-//             ...notificationPayload,
-//             userId: adminId, // Gán thông báo cho admin này
-//         });
-//     });
+  const { uid } = data;
 
-//     // Thực thi batch write
-//     await batch.commit();
-//     logger.info(`Đã tạo ${adminSnapshot.size} thông báo cho admin.`);
+  if (!uid) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "UID người dùng không hợp lệ."
+    );
+  }
 
-//   } catch (error) {
-//     logger.error("Lỗi khi tạo thông báo cho admin:", error);
-//   }
+  try {
+    // Xóa tài khoản người dùng khỏi Firebase Authentication
+    await admin.auth().deleteUser(uid);
 
-//   return null;
-// });
+    // Xóa tài liệu người dùng khỏi Firestore
+    await db.collection("users").doc(uid).delete();
 
+    // Tùy chọn: Xóa tất cả báo cáo của người dùng này
+    const userReportsRef = db.collection("reports").where("userId", "==", uid);
+    const snapshot = await userReportsRef.get();
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
 
-// /**
-//  * Tạo một bản ghi thông báo cho nhân viên khi báo cáo của họ được cập nhật.
-//  * Kích hoạt khi trạng thái báo cáo thay đổi.
-//  */
-// exports.createEmployeeNotificationOnUpdate = onDocumentUpdated("reports/{reportId}", async (event) => {
-//     logger.info("Triggered: Report updated, ID:", event.params.reportId);
+    return { success: true, message: `Người dùng ${uid} đã được xóa thành công.` };
+  } catch (error) {
+    console.error("Lỗi xóa người dùng:", error);
+    throw new functions.https.HttpsError(
+      "internal",
+      `Không thể xóa người dùng: ${error.message}`
+    );
+  }
+});
 
-//     const dataAfter = event.data.after.data();
-//     const dataBefore = event.data.before.data();
+// 3. Sao lưu Firestore (Chỉ có trên gói Blaze và cần cấu hình Google Cloud Storage)
+// Hướng dẫn chi tiết: https://firebase.google.com/docs/firestore/manage-data/export-import
+// Hàm này thường được kích hoạt bằng lịch trình (Cloud Scheduler) hoặc HTTP request từ Admin Panel
+exports.backupFirestore = functions.https.onCall(async (data, context) => {
+  // Chỉ cho phép admin thực hiện
+  if (context.auth.token.role !== "admin") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Chỉ admin mới có thể sao lưu dữ liệu."
+    );
+  }
 
-//     // Chỉ tạo thông báo nếu 'status' thay đổi từ 'pending'
-//     if (dataBefore.status !== 'pending' || dataAfter.status === dataBefore.status) {
-//         logger.info("Trạng thái không thay đổi từ 'pending', bỏ qua.");
-//         return null;
-//     }
+  const projectId = process.env.GCLOUD_PROJECT;
+  const bucketName = "gs://YOUR_BACKUP_BUCKET_NAME"; // Thay thế bằng tên Cloud Storage bucket của bạn
 
-//     const userId = dataAfter.userId;
-//     if (!userId) {
-//         logger.error("Không có userId trong báo cáo.");
-//         return null;
-//     }
+  if (!bucketName) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Vui lòng cấu hình Cloud Storage bucket cho backup."
+    );
+  }
 
-//     try {
-//         const statusText = dataAfter.status === 'approved' ? 'được duyệt' : 'bị từ chối';
-//         const serviceName = dataAfter.service || "chưa có tên";
+  const client = new admin.firestore.v1.FirestoreAdminClient();
+  const databaseName = client.databasePath(projectId, "(default)");
 
-//         const notificationPayload = {
-//             userId: userId,
-//             title: "Báo cáo đã được xử lý",
-//             body: `Báo cáo cho dịch vụ "${serviceName}" của bạn đã ${statusText}.`,
-//             createdAt: Timestamp.now(),
-//             read: false,
-//         };
+  try {
+    const responses = await client.exportDocuments({
+      name: databaseName,
+      outputUriPrefix: bucketName,
+      // collectionIds: [], // Để trống để backup tất cả các collection
+    });
+    const operation = responses[0];
+    console.log(`Bắt đầu hoạt động sao lưu: ${operation.name}`);
+    return { success: true, message: "Quá trình sao lưu đã được bắt đầu." };
+  } catch (error) {
+    console.error("Lỗi khi bắt đầu sao lưu Firestore:", error);
+    throw new functions.https.HttpsError(
+      "internal",
+      `Không thể bắt đầu sao lưu: ${error.message}`
+    );
+  }
+});
 
-//         await getFirestore().collection("notifications").add(notificationPayload);
-//         logger.info(`Đã tạo thông báo cho nhân viên ${userId}`);
+// 4. Xóa toàn bộ dữ liệu Firestore (CỰC KỲ NGUY HIỂM)
+// Hàm này không nên được gọi thường xuyên và cần bảo mật cực cao
+exports.deleteAllFirestoreData = functions.https.onCall(async (data, context) => {
+    // Chỉ cho phép admin thực hiện
+    if (context.auth.token.role !== "admin") {
+        throw new functions.https.HttpsError(
+            "permission-denied",
+            "Chỉ admin mới có thể xóa toàn bộ dữ liệu."
+        );
+    }
 
-//     } catch (error) {
-//         logger.error("Lỗi khi tạo thông báo cho nhân viên:", error);
-//     }
+    const collectionsToDelete = ['users', 'reports', 'notifications']; // Thêm tất cả các collection của bạn vào đây
 
-//     return null;
-// });
-
-// // const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
-// // const { getFirestore } = require("firebase-admin/firestore");
-// // const { initializeApp } = require("firebase-admin/app");
-// // const { getMessaging } = require("firebase-admin/messaging");
-// // const logger = require("firebase-functions/logger");
-
-// // // Khởi tạo Firebase Admin
-// // initializeApp();
-
-// // /**
-// //  * Gửi thông báo cho Admin khi có báo cáo mới.
-// //  * Kích hoạt khi một document mới được tạo trong collection 'reports'.
-// //  */
-// // exports.notifyAdminOnNewReport = onDocumentCreated("reports/{reportId}", async (event) => {
-// //   logger.info("Function triggered by new report, ID:", event.params.reportId);
-
-// //   const newReport = event.data.data();
-// //   const employeeName = newReport.employeeName || "Một nhân viên";
-
-// //   if (newReport.status !== "pending") {
-// //     logger.info("Báo cáo không ở trạng thái 'pending', bỏ qua.", { status: newReport.status });
-// //     return null;
-// //   }
-
-// //   try {
-// //     const db = getFirestore();
-// //     const usersRef = db.collection("users");
-// //     const adminQuery = usersRef.where("role", "==", "admin");
-// //     const adminQuerySnapshot = await adminQuery.get();
-
-// //     if (adminQuerySnapshot.empty) {
-// //       logger.info("Không tìm thấy tài khoản admin.");
-// //       return null;
-// //     }
-
-// //     const tokens = [];
-// //     adminQuerySnapshot.forEach((doc) => {
-// //       if (doc.data().pushToken) {
-// //         tokens.push(doc.data().pushToken);
-// //       }
-// //     });
-
-// //     if (tokens.length === 0) {
-// //       logger.info("Không có admin nào có push token.");
-// //       return null;
-// //     }
-
-// //     const payload = {
-// //       notification: {
-// //         title: "Báo cáo mới cần duyệt!",
-// //         body: `${employeeName} vừa tạo một báo cáo mới. Hãy kiểm tra.`,
-// //         sound: "default",
-// //       },
-// //     };
-
-// //     logger.info(`Gửi thông báo đến ${tokens.length} admin.`);
-// //     await getMessaging().sendToDevice(tokens, payload);
-
-// //   } catch (error) {
-// //     logger.error("Lỗi khi gửi thông báo cho admin:", error);
-// //   }
-
-// //   return null;
-// // });
-
-
-// // /**
-// //  * Gửi thông báo cho Nhân viên khi báo cáo của họ được cập nhật.
-// //  * Kích hoạt khi một document trong 'reports' được cập nhật.
-// //  */
-// // exports.notifyEmployeeOnReportUpdate = onDocumentUpdated("reports/{reportId}", async (event) => {
-// //     logger.info("Function triggered by report update, ID:", event.params.reportId);
-
-// //     const dataAfter = event.data.after.data();
-// //     const dataBefore = event.data.before.data();
-
-// //     // Chỉ gửi thông báo nếu trường 'status' thực sự thay đổi và không còn là 'pending'
-// //     if (dataAfter.status === dataBefore.status || dataAfter.status === 'pending') {
-// //         logger.info("Trạng thái không thay đổi hoặc vẫn đang chờ, không gửi thông báo.", {
-// //             before: dataBefore.status,
-// //             after: dataAfter.status
-// //         });
-// //         return null;
-// //     }
-
-// //     const userId = dataAfter.userId;
-// //     if (!userId) {
-// //         logger.error("Không có userId trong báo cáo, không thể gửi thông báo.");
-// //         return null;
-// //     }
-
-// //     try {
-// //         // Lấy thông tin của nhân viên đã tạo báo cáo
-// //         const db = getFirestore();
-// //         const userDoc = await db.collection("users").doc(userId).get();
-
-// //         if (!userDoc.exists) {
-// //             logger.warn("Không tìm thấy document của user:", userId);
-// //             return null;
-// //         }
-
-// //         const pushToken = userDoc.data().pushToken;
-// //         if (!pushToken) {
-// //             logger.info("Nhân viên này không có push token.");
-// //             return null;
-// //         }
-
-// //         // Tạo nội dung thông báo dựa trên trạng thái mới
-// //         const statusText = dataAfter.status === 'approved' ? 'được duyệt' : 'bị từ chối';
-// //         const payload = {
-// //             notification: {
-// //                 title: "Trạng thái báo cáo đã thay đổi",
-// //                 body: `Báo cáo của bạn cho dịch vụ "${dataAfter.service || ''}" đã ${statusText}.`,
-// //                 sound: "default",
-// //             },
-// //         };
-
-// //         logger.info(`Gửi thông báo đến nhân viên ${userId}`);
-// //         await getMessaging().sendToDevice([pushToken], payload);
-
-// //     } catch (error) {
-// //         logger.error("Lỗi khi gửi thông báo cho nhân viên:", error);
-// //     }
-
-// //     return null;
-// // });
+    try {
+        for (const collectionName of collectionsToDelete) {
+            const collectionRef = db.collection(collectionName);
+            const snapshot = await collectionRef.limit(100).get(); // Xóa từng đợt 100 docs
+            while (snapshot.size > 0) {
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+                // Lấy các tài liệu tiếp theo
+                const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+                snapshot = await collectionRef.startAfter(lastDoc).limit(100).get();
+            }
+            console.log(`Đã xóa collection: ${collectionName}`);
+        }
+        return { success: true, message: "Đã xóa toàn bộ dữ liệu Firestore thành công." };
+    } catch (error) {
+        console.error("Lỗi khi xóa toàn bộ dữ liệu Firestore:", error);
+        throw new functions.https.HttpsError(
+            "internal",
+            `Không thể xóa toàn bộ dữ liệu: ${error.message}`
+        );
+    }
+});

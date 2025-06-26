@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        height: 300,
+        height: 350,
         backgroundColor: COLORS.lightGray,
     },
     lottieSpinner: {
@@ -648,7 +648,7 @@ const styles = StyleSheet.create({
         height: 150,
     },
     loadingText: {
-        marginTop: 10,
+        marginTop: 0,
         fontSize: 16,
         color: COLORS.secondary,
     },
