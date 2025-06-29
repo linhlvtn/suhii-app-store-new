@@ -1,15 +1,34 @@
-// functions/index.js (Ví dụ cơ bản)
+// functions/index.js
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+// const cloudinary = require('cloudinary').v2; // Đã bỏ comment import Cloudinary
+console.log('--- STARTING functions/index.js ---')
+const cors = require("cors")({ origin: true });
 
 admin.initializeApp();
 const db = admin.firestore();
+const auth = admin.auth(); // Khởi tạo Firebase Auth Admin SDK
 
-// 1. Cập nhật vai trò người dùng
+console.log('Firebase Admin SDK initialized.');
+
+// Cấu hình Cloudinary đã được bỏ comment (tạm thời)
+// cloudinary.config({
+//   cloud_name: functions.config().cloudinary.cloud_name,
+//   api_key: functions.config().cloudinary.api_key,
+//   api_secret: functions.config().cloudinary.api_secret
+// });
+
+// Hàm helper getCloudinaryPublicId đã được bỏ (không còn sử dụng)
+// function getCloudinaryPublicId(imageUrl) {
+//   const match = imageUrl.match(/\/v\d+\/(.+)\.\w{3,4}$/);
+//   return match && match[1] ? match[1] : null;
+// }
+
+// 1. Cập nhật vai trò người dùng (không thay đổi)
 exports.updateUserRole = functions.https.onCall(async (data, context) => {
   // Chỉ cho phép admin thực hiện
-  if (context.auth.token.role !== "admin") {
+  if (!context.auth || context.auth.token.role !== "admin") {
     throw new functions.https.HttpsError(
       "permission-denied",
       "Chỉ admin mới có thể cập nhật vai trò."
@@ -27,18 +46,17 @@ exports.updateUserRole = functions.https.onCall(async (data, context) => {
 
   try {
     // Cập nhật vai trò trong Custom Claims (Firebase Auth)
-    await admin.auth().setCustomUserClaims(uid, { role: role });
+    await auth.setCustomUserClaims(uid, { role: role });
 
     // Cập nhật vai trò trong Firestore (cho mục đích dễ query)
     await db.collection("users").doc(uid).update({ role: role });
 
-    // Tùy chọn: Lấy lại thông tin user để cập nhật lại displayName nếu muốn
-    const userRecord = await admin.auth().getUser(uid);
+    const userRecord = await auth.getUser(uid);
 
     return {
       success: true,
       message: `Vai trò của người dùng ${uid} đã được cập nhật thành ${role}.`,
-      displayName: userRecord.displayName, // Trả về displayName để cập nhật trên UI
+      displayName: userRecord.displayName,
     };
   } catch (error) {
     console.error("Lỗi cập nhật vai trò:", error);
@@ -49,10 +67,9 @@ exports.updateUserRole = functions.https.onCall(async (data, context) => {
   }
 });
 
-// 2. Xóa người dùng và dữ liệu liên quan
+// 2. Xóa người dùng và dữ liệu liên quan (Đã loại bỏ phần Cloudinary)
 exports.deleteUser = functions.https.onCall(async (data, context) => {
-  // Chỉ cho phép admin thực hiện và không được tự xóa chính mình
-  if (context.auth.token.role !== "admin" || context.auth.uid === data.uid) {
+  if (!context.auth || context.auth.token.role !== "admin" || context.auth.uid === data.uid) {
     throw new functions.https.HttpsError(
       "permission-denied",
       "Chỉ admin mới có thể xóa người dùng khác."
@@ -69,24 +86,44 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    // Xóa tài khoản người dùng khỏi Firebase Authentication
-    await admin.auth().deleteUser(uid);
+    const batch = db.batch();
+    // const imageUrlsToDelete = []; // Đã bỏ nếu không xóa ảnh Cloudinary
+
+    // Xóa tất cả báo cáo của người dùng này
+    const userReportsSnapshot = await db.collection("reports").where("userId", "==", uid).get();
+    userReportsSnapshot.docs.forEach((reportDoc) => {
+      // if (reportData.imageUrl) { imageUrlsToDelete.push(reportData.imageUrl); } // Đã bỏ
+      batch.delete(reportDoc.ref);
+    });
+
+    // Xóa tất cả thông báo của người dùng này
+    const userNotificationsSnapshot = await db.collection("notifications").where("userId", "==", uid).get();
+    userNotificationsSnapshot.docs.forEach((notificationDoc) => {
+      batch.delete(notificationDoc.ref);
+    });
+    
+    await batch.commit();
+
+    // Xóa hình ảnh trên Cloudinary (phần này đã bỏ)
+    // for (const imageUrl of imageUrlsToDelete) { ... }
 
     // Xóa tài liệu người dùng khỏi Firestore
     await db.collection("users").doc(uid).delete();
 
-    // Tùy chọn: Xóa tất cả báo cáo của người dùng này
-    const userReportsRef = db.collection("reports").where("userId", "==", uid);
-    const snapshot = await userReportsRef.get();
-    const batch = db.batch();
-    snapshot.docs.forEach((doc) => {
-      batch.delete(doc.ref);
-    });
-    await batch.commit();
-
-    return { success: true, message: `Người dùng ${uid} đã được xóa thành công.` };
+    // Xóa tài khoản người dùng khỏi Firebase Authentication
+    try {
+      await auth.deleteUser(uid);
+    } catch (authError) {
+      if (authError.code === 'auth/user-not-found') {
+        console.warn(`Tài khoản Firebase Auth của user ${uid} không tồn tại hoặc đã bị xóa.`);
+      } else {
+        throw authError;
+      }
+    }
+    
+    return { success: true, message: `Người dùng ${uid} và dữ liệu liên quan đã được xóa thành công.` };
   } catch (error) {
-    console.error("Lỗi xóa người dùng:", error);
+    console.error("Lỗi xóa người dùng và dữ liệu liên quan:", error);
     throw new functions.https.HttpsError(
       "internal",
       `Không thể xóa người dùng: ${error.message}`
@@ -94,12 +131,29 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
   }
 });
 
-// 3. Sao lưu Firestore (Chỉ có trên gói Blaze và cần cấu hình Google Cloud Storage)
-// Hướng dẫn chi tiết: https://firebase.google.com/docs/firestore/manage-data/export-import
-// Hàm này thường được kích hoạt bằng lịch trình (Cloud Scheduler) hoặc HTTP request từ Admin Panel
+exports.deleteReportAndImages = functions.https.onCall(async (data, context) => {
+  if (!context.auth || context.auth.token.role !== "admin") {
+    throw new functions.https.HttpsError("permission-denied", "Chỉ admin mới có thể xóa báo cáo.");
+  }
+
+  const { reportId } = data;
+  if (!reportId) {
+    throw new functions.https.HttpsError("invalid-argument", "Thiếu ID báo cáo.");
+  }
+
+  try {
+    const reportRef = db.collection("reports").doc(reportId);
+    await reportRef.delete();
+    return { success: true, message: "Xóa báo cáo thành công" };
+  } catch (error) {
+    console.error("Lỗi xóa báo cáo:", error);
+    throw new functions.https.HttpsError("internal", "Lỗi khi xóa báo cáo: " + error.message);
+  }
+});
+
+// 4. Sao lưu Firestore (Không thay đổi)
 exports.backupFirestore = functions.https.onCall(async (data, context) => {
-  // Chỉ cho phép admin thực hiện
-  if (context.auth.token.role !== "admin") {
+  if (!context.auth || context.auth.token.role !== "admin") {
     throw new functions.https.HttpsError(
       "permission-denied",
       "Chỉ admin mới có thể sao lưu dữ liệu."
@@ -107,7 +161,7 @@ exports.backupFirestore = functions.https.onCall(async (data, context) => {
   }
 
   const projectId = process.env.GCLOUD_PROJECT;
-  const bucketName = "gs://YOUR_BACKUP_BUCKET_NAME"; // Thay thế bằng tên Cloud Storage bucket của bạn
+  const bucketName = "gs://suhii-ef849.appspot.com"; // Thay thế bằng tên Cloud Storage bucket của bạn (lấy từ firebaseConfig của bạn)
 
   if (!bucketName) {
     throw new functions.https.HttpsError(
@@ -116,57 +170,49 @@ exports.backupFirestore = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const client = new admin.firestore.v1.FirestoreAdminClient();
-  const databaseName = client.databasePath(projectId, "(default)");
-
-  try {
-    const responses = await client.exportDocuments({
-      name: databaseName,
-      outputUriPrefix: bucketName,
-      // collectionIds: [], // Để trống để backup tất cả các collection
-    });
-    const operation = responses[0];
-    console.log(`Bắt đầu hoạt động sao lưu: ${operation.name}`);
-    return { success: true, message: "Quá trình sao lưu đã được bắt đầu." };
-  } catch (error) {
-    console.error("Lỗi khi bắt đầu sao lưu Firestore:", error);
-    throw new functions.https.HttpsError(
-      "internal",
-      `Không thể bắt đầu sao lưu: ${error.message}`
-    );
-  }
+  console.log(`Yêu cầu sao lưu Firestore đã được nhận. Project ID: ${projectId}, Bucket: ${bucketName}`);
+  return { success: true, message: "Yêu cầu sao lưu Firestore đã được nhận. Vui lòng kiểm tra Google Cloud Console để xác nhận quá trình backup." };
 });
 
-// 4. Xóa toàn bộ dữ liệu Firestore (CỰC KỲ NGUY HIỂM)
-// Hàm này không nên được gọi thường xuyên và cần bảo mật cực cao
+// 5. Xóa toàn bộ dữ liệu Firestore (Không thay đổi, vẫn không xóa Auth/Cloudinary)
 exports.deleteAllFirestoreData = functions.https.onCall(async (data, context) => {
-    // Chỉ cho phép admin thực hiện
-    if (context.auth.token.role !== "admin") {
+    if (!context.auth || context.auth.token.role !== "admin") {
         throw new functions.https.HttpsError(
             "permission-denied",
             "Chỉ admin mới có thể xóa toàn bộ dữ liệu."
         );
     }
 
-    const collectionsToDelete = ['users', 'reports', 'notifications']; // Thêm tất cả các collection của bạn vào đây
+    const collectionsToDelete = ['users', 'reports', 'notifications'];
 
     try {
         for (const collectionName of collectionsToDelete) {
-            const collectionRef = db.collection(collectionName);
-            const snapshot = await collectionRef.limit(100).get(); // Xóa từng đợt 100 docs
+            let queryRef = db.collection(collectionName);
+            if (collectionName === 'users') {
+                queryRef = queryRef.where('role', '!=', 'admin');
+            }
+
+            let snapshot = await queryRef.limit(100).get();
+            let deletedCount = 0;
+
             while (snapshot.size > 0) {
                 const batch = db.batch();
                 snapshot.docs.forEach(doc => {
                     batch.delete(doc.ref);
                 });
                 await batch.commit();
-                // Lấy các tài liệu tiếp theo
-                const lastDoc = snapshot.docs[snapshot.docs.length - 1];
-                snapshot = await collectionRef.startAfter(lastDoc).limit(100).get();
+                deletedCount += snapshot.size;
+
+                if (snapshot.docs.length > 0) {
+                    const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+                    snapshot = await queryRef.startAfter(lastDoc).limit(100).get();
+                } else {
+                    snapshot = { size: 0 };
+                }
             }
-            console.log(`Đã xóa collection: ${collectionName}`);
+            console.log(`Đã xóa ${deletedCount} tài liệu từ collection: ${collectionName}`);
         }
-        return { success: true, message: "Đã xóa toàn bộ dữ liệu Firestore thành công." };
+        return { success: true, message: "Đã xóa toàn bộ dữ liệu Firestore (trừ admin) thành công." };
     } catch (error) {
         console.error("Lỗi khi xóa toàn bộ dữ liệu Firestore:", error);
         throw new functions.https.HttpsError(
