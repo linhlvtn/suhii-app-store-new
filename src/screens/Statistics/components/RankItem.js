@@ -25,7 +25,7 @@ const RankItem = ({ item, index }) => {
             </View>
             <View style={styles.rankStats}>
                 <Text style={styles.rankRevenue}>{item.revenue.toLocaleString('vi-VN')} đ</Text>
-                <Text style={styles.rankClients}>{item.clients} báo cáo</Text>
+                <Text style={styles.rankClients}>{item.clients} lượt khách</Text>
             </View>
         </View>
     );

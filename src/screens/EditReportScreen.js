@@ -129,7 +129,7 @@ const EditReportScreen = () => {
                     setSelectedPartnerId(data.partnerId || null);
                     setTempPartner(data.partnerId || null); // <-- KHỞI TẠO tempPartner VỚI GIÁ TRỊ CŨ
                 } else {
-                    Alert.alert("Lỗi", "Không tìm thấy báo cáo.");
+                    Alert.alert("Lỗi", "Không tìm thấy hóa đơn.");
                     navigation.goBack();
                     return;
                 }
@@ -149,8 +149,8 @@ const EditReportScreen = () => {
                 setUsers(fetchedUsers);
 
             } catch (error) {
-                console.error("Lỗi khi tải báo cáo hoặc người dùng:", error);
-                Alert.alert("Lỗi", "Không thể tải dữ liệu báo cáo hoặc danh sách nhân viên.");
+                console.error("Lỗi khi tải hóa đơn hoặc người dùng:", error);
+                Alert.alert("Lỗi", "Không thể tải dữ liệu hóa đơn hoặc danh sách nhân viên.");
                 navigation.goBack();
             } finally {
                 setIsFetchingData(false);
@@ -292,11 +292,11 @@ const EditReportScreen = () => {
                 participantIds: participantIds,
             });
 
-            Alert.alert('Thành công', 'Báo cáo đã được cập nhật!');
+            Alert.alert('Thành công', 'Hóa đơn đã được cập nhật!');
             navigation.goBack();
         } catch (error) {
-            console.error('Lỗi khi cập nhật báo cáo:', error);
-            Alert.alert('Lỗi', 'Có lỗi xảy ra khi cập nhật báo cáo.');
+            console.error('Lỗi khi cập nhật hóa đơn:', error);
+            Alert.alert('Lỗi', 'Có lỗi xảy ra khi cập nhật hóa đơn.');
         } finally {
             setUploading(false);
         }
@@ -331,13 +331,13 @@ const EditReportScreen = () => {
     }
 
     return (
-        <View style={[styles.fullScreenContainer, { paddingTop: insets.top }]}>
+        <View style={[styles.fullScreenContainer]}>
             <StatusBar style="dark" />
             <View style={[styles.header, { paddingTop: insets.top }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={28} color={COLORS.black} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Chỉnh Sửa Báo Cáo</Text>
+                <Text style={styles.headerTitle}>Chỉnh Sửa Hóa Đơn</Text>
                 <View style={styles.headerRightPlaceholder} />
             </View>
 
@@ -440,7 +440,7 @@ const EditReportScreen = () => {
                     <Text style={styles.label}>Ghi chú (Tùy chọn)</Text>
                     <TextInput
                         style={[styles.input, styles.noteInput]}
-                        placeholder="Thêm ghi chú về báo cáo..."
+                        placeholder="Thêm ghi chú về hóa đơn..."
                         multiline
                         numberOfLines={4}
                         value={note}
@@ -481,7 +481,7 @@ const EditReportScreen = () => {
                     onPress={handleSubmit}
                     disabled={uploading}
                 >
-                    <Text style={styles.submitButtonText}>Cập Nhật Báo Cáo</Text>
+                    <Text style={styles.submitButtonText}>Cập Nhật Hóa Đơn</Text>
                 </TouchableOpacity>
             </View>
         </View>

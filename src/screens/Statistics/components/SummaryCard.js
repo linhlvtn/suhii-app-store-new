@@ -1,3 +1,4 @@
+// src/screens/Statistics/components/SummaryCard.js
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,8 +19,6 @@ const COLORS = {
 };
 
 const formatCurrency = (amount) => {
-    // Sử dụng 'vi-VN' và 'VND' để đảm bảo định dạng số đúng của Việt Nam
-    // Sau đó thay thế ký hiệu '₫' nếu nó tự động thêm vào
     let formattedAmount = new Intl.NumberFormat('vi-VN', {
         style: 'currency',
         currency: 'VND',
@@ -27,12 +26,9 @@ const formatCurrency = (amount) => {
         maximumFractionDigits: 0,
     }).format(amount);
 
-    // Ký hiệu mặc định của VND trong Intl.NumberFormat có thể là "₫" hoặc "VNĐ" tùy môi trường/thiết bị.
-    // Chúng ta sẽ thay thế nó bằng "₫" một cách nhất quán.
-    return formattedAmount.replace(/VNĐ/g, '₫').replace(/₫/g, '₫').trim(); // Đảm bảo chỉ có ₫ và không có khoảng trắng thừa
+    return formattedAmount.replace(/VNĐ/g, '₫').replace(/₫/g, '₫').trim();
 };
 
-// Thêm customCardWidth và isDailyReport vào props
 const SummaryCard = ({ title, totalRevenue, totalReports, change, value, icon, color, type, chartData, customCardWidth, isDailyReport }) => {
     const isIncrease = change > 0;
     const changeColor = isIncrease ? COLORS.success : (change < 0 ? COLORS.danger : COLORS.secondary);
@@ -49,13 +45,11 @@ const SummaryCard = ({ title, totalRevenue, totalReports, change, value, icon, c
         displayIcon = icon || "people-outline";
         displayColor = color || '#3498db';
     } else if (type === 'actualRevenue') {
-        // Đối với actualRevenue, giá trị đã là chuỗi định dạng (vd: "1.234.567 VNĐ")
-        // Chỉ cần thay thế "VNĐ" bằng "₫" nếu có.
-        displayValue = value.replace(/VNĐ/g, '₫').replace(/₫/g, '₫').trim(); // Đảm bảo thay thế đúng
+        displayValue = value.replace(/VNĐ/g, '₫').replace(/₫/g, '₫').trim();
         displayIcon = icon || "cash-outline";
         displayColor = color || COLORS.success;
     }
-    else {
+    else { // Default type, used for 'Tổng doanh thu cá nhân'
         displayValue = formatCurrency(totalRevenue);
         displayIcon = icon || "cash-outline";
         displayColor = color || COLORS.primary;
@@ -77,8 +71,18 @@ const SummaryCard = ({ title, totalRevenue, totalReports, change, value, icon, c
     );
 
     return (
-        // Áp dụng customCardWidth hoặc mặc định là 48%
         <View style={[styles.card, { width: customCardWidth || '48%' }]}>
+            {/* Header cho tiêu đề và LƯỢT KHÁCH */}
+            <View style={styles.cardHeaderRow}>
+                <Text style={styles.cardTitleNew}>{title}</Text>
+                {/* HIỂN THỊ TỔNG LƯỢT KHÁCH TẠI ĐÂY */}
+                {totalReports !== undefined && (
+                    <Text style={styles.totalCustomersBadge}> {/* Changed style name here */}
+                        Tổng lượt khách: {totalReports}
+                    </Text>
+                )}
+            </View>
+
             {/* Icon chỉ báo xu hướng */}
             {change !== undefined && (
                 <View style={styles.trendIndicator}>
@@ -86,9 +90,6 @@ const SummaryCard = ({ title, totalRevenue, totalReports, change, value, icon, c
                     <View style={[styles.trendDot, { backgroundColor: changeColor }]} />
                 </View>
             )}
-
-            {/* Tiêu đề */}
-            <Text style={styles.cardTitleNew}>{title}</Text>
 
             {/* Giá trị chính */}
             <Text style={styles.cardValueNew}>{displayValue}</Text>
@@ -102,14 +103,14 @@ const SummaryCard = ({ title, totalRevenue, totalReports, change, value, icon, c
                 </View>
             )}
 
-            {/* Sparkline - Chỉ hiển thị nếu KHÔNG phải báo cáo ngày (isDailyReport là false) và có đủ dữ liệu */}
+            {/* Sparkline - Chỉ hiển thị nếu KHÔNG phải hóa đơn ngày (isDailyReport là false) và có đủ dữ liệu */}
             {!isDailyReport && dataForSparkline.length > 1 && (
                 <LineChart
                     style={styles.sparklineChart}
                     data={dataForSparkline}
                     contentInset={{ top: 5, bottom: 5, left: 0, right: 0 }}
                     curve={shape.curveNatural}
-                    svg={{ stroke: displayColor, strokeWidth: 2 }} // Sử dụng displayColor cho sparkline
+                    svg={{ stroke: displayColor, strokeWidth: 2 }}
                     renderDot={() => null}
                     showGrid={false}
                 >
@@ -125,7 +126,6 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.white,
         borderRadius: 8,
         padding: 15,
-        // marginHorizontal: 20, // Đã loại bỏ marginHorizontal ở đây để customCardWidth hoạt động đúng
         marginBottom: 10,
         marginTop: 10,
         shadowColor: "#000",
@@ -134,6 +134,27 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 2,
         boxSizing: 'border-box',
+    },
+    cardHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 5,
+    },
+    cardTitleNew: {
+        fontSize: 14,
+        color: COLORS.secondary,
+        fontWeight: '500',
+    },
+    totalCustomersBadge: { // New style for the badge
+        fontSize: 11, // Smaller font size for a badge
+        color: COLORS.white,
+        backgroundColor: COLORS.primary, // Black background
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 12, // Rounded corners for badge effect
+        fontWeight: 'bold', // Make it bold
+        overflow: 'hidden', // Ensure content stays within border radius
     },
     trendIndicator: {
         flexDirection: 'row',
@@ -145,12 +166,6 @@ const styles = StyleSheet.create({
         height: 6,
         borderRadius: 3,
         marginLeft: 5,
-    },
-    cardTitleNew: {
-        fontSize: 14,
-        color: COLORS.secondary,
-        marginBottom: 5,
-        fontWeight: '500',
     },
     cardValueNew: {
         fontSize: 24,

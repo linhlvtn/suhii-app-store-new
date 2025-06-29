@@ -16,13 +16,16 @@ const StatsChart = ({ data, chartType = 'bar', title }) => {
 
     // useEffect để tự động cuộn đến cuối khi dữ liệu thay đổi và biểu đồ được hiển thị
     useEffect(() => {
-        if (scrollViewRef.current && isDataValid && chartType === 'line') {
-            // Chỉ cuộn nếu là LineChart (vì BarChart thường không cần cuộn)
-            // Và có dữ liệu hợp lệ
-            // Đặt timeout nhỏ để đảm bảo biểu đồ đã render xong trước khi cuộn
-            setTimeout(() => {
-                scrollViewRef.current.scrollToEnd({ animated: true });
+        if (isDataValid && chartType === 'line') {
+            const timer = setTimeout(() => {
+                // Kiểm tra lại ref ngay trước khi sử dụng để tránh lỗi
+                if (scrollViewRef.current) {
+                    scrollViewRef.current.scrollToEnd({ animated: true });
+                }
             }, 100); // Có thể điều chỉnh thời gian delay này nếu cần
+
+            // Dọn dẹp timer khi component unmount hoặc effect re-run
+            return () => clearTimeout(timer);
         }
     }, [data, chartType, isDataValid]); // Re-run effect khi data hoặc chartType thay đổi
 

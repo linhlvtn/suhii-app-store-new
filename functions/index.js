@@ -89,7 +89,7 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
     const batch = db.batch();
     // const imageUrlsToDelete = []; // Đã bỏ nếu không xóa ảnh Cloudinary
 
-    // Xóa tất cả báo cáo của người dùng này
+    // Xóa tất cả hóa đơn của người dùng này
     const userReportsSnapshot = await db.collection("reports").where("userId", "==", uid).get();
     userReportsSnapshot.docs.forEach((reportDoc) => {
       // if (reportData.imageUrl) { imageUrlsToDelete.push(reportData.imageUrl); } // Đã bỏ
@@ -133,21 +133,21 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
 
 exports.deleteReportAndImages = functions.https.onCall(async (data, context) => {
   if (!context.auth || context.auth.token.role !== "admin") {
-    throw new functions.https.HttpsError("permission-denied", "Chỉ admin mới có thể xóa báo cáo.");
+    throw new functions.https.HttpsError("permission-denied", "Chỉ admin mới có thể xóa hóa đơn.");
   }
 
   const { reportId } = data;
   if (!reportId) {
-    throw new functions.https.HttpsError("invalid-argument", "Thiếu ID báo cáo.");
+    throw new functions.https.HttpsError("invalid-argument", "Thiếu ID hóa đơn.");
   }
 
   try {
     const reportRef = db.collection("reports").doc(reportId);
     await reportRef.delete();
-    return { success: true, message: "Xóa báo cáo thành công" };
+    return { success: true, message: "Xóa hóa đơn thành công" };
   } catch (error) {
-    console.error("Lỗi xóa báo cáo:", error);
-    throw new functions.https.HttpsError("internal", "Lỗi khi xóa báo cáo: " + error.message);
+    console.error("Lỗi xóa hóa đơn:", error);
+    throw new functions.https.HttpsError("internal", "Lỗi khi xóa hóa đơn: " + error.message);
   }
 });
 

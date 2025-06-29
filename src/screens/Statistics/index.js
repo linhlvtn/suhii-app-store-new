@@ -207,7 +207,7 @@ const AdminStatisticsDashboard = () => {
                     createdAt: doc.data().createdAt.toDate() 
                 }));
             } catch (e) {
-                console.error("Lỗi khi lấy báo cáo đã duyệt:", e);
+                console.error("Lỗi khi lấy hóa đơn đã duyệt:", e);
                 if (e.code === 'failed-precondition') {
                     Alert.alert(
                         "Lỗi Cấu Hình", 

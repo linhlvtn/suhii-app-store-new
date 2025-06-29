@@ -1,16 +1,19 @@
 // src/screens/CreateReportScreen.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, ActivityIndicator, Platform, TouchableWithoutFeedback } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
-import { db, auth } from '../../firebaseConfig';
-import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore'; // Import 'where'
+import { db, auth } from '../../firebaseConfig'; // Đảm bảo db và auth được import từ firebaseConfig
+import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { useNavigation } from '@react-navigation/native'; // Import useNavigation
+import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../src/context/AuthContext'; // Để lấy user info và userRole
+
+import { useCommissionRates } from '../hooks/useCommissionRates'; // <-- THÊM DÒNG NÀY ĐỂ IMPORT HOOK MỚI
 
 // --- Hằng số màu sắc ---
 // Sử dụng COLORS bạn đã định nghĩa hoặc từ theme.js nếu có
@@ -52,37 +55,40 @@ const RadioButton = ({ options, selectedOption, onSelect }) => (
 );
 
 // --- CÁC HẰNG SỐ VÀ LỰA CHỌN (Không đổi) ---
-const CLOUDINARY_CLOUD_NAME = 'dq802xggt'; //
-const CLOUDINARY_UPLOAD_PRESET = 'suhii_app_preset'; //
-const SERVICE_OPTIONS = [ //
+const CLOUDINARY_CLOUD_NAME = 'dq802xggt';
+const CLOUDINARY_UPLOAD_PRESET = 'suhii_app_preset';
+const SERVICE_OPTIONS = [
     { label: 'Nail', value: 'Nail' },
     { label: 'Mi', value: 'Mi' },
     { label: 'Gội đầu', value: 'Gội đầu' },
     { label: 'Khác', value: 'Khác' },
 ];
-const PAYMENT_OPTIONS = [ //
-    { label: 'Tiền mặt', value: 'cash' }, // Đổi value thành 'cash' để đồng bộ với code trước đó
-    { label: 'Chuyển khoản', value: 'transfer' }, // Đổi value thành 'transfer'
+const PAYMENT_OPTIONS = [
+    { label: 'Tiền mặt', value: 'cash' },
+    { label: 'Chuyển khoản', value: 'transfer' },
 ];
 
 const CreateReportScreen = () => {
     const insets = useSafeAreaInsets();
-    const navigation = useNavigation(); // Use hook for navigation
+    const navigation = useNavigation();
+    const { user, userRole } = useAuth(); // Lấy thông tin user và userRole từ AuthContext
 
     const [price, setPrice] = useState('');
-    const [rawPrice, setRawPrice] = useState(''); //
+    const [rawPrice, setRawPrice] = useState('');
     const [selectedServices, setSelectedServices] = useState([]);
     const [note, setNote] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState(PAYMENT_OPTIONS[0].value); //
+    const [paymentMethod, setPaymentMethod] = useState(PAYMENT_OPTIONS[0].value);
     const [imageUri, setImageUri] = useState(null);
-    const [uploading, setUploading] = useState(false); // Đổi tên state loading thành uploading để rõ nghĩa hơn
+    const [uploading, setUploading] = useState(false);
     const [employees, setEmployees] = useState([]);
     const [selectedPartner, setSelectedPartner] = useState(null);
     const [isPickerModalVisible, setPickerModalVisible] = useState(false);
     const [tempPartner, setTempPartner] = useState(null);
 
-    // MỚI: Trạng thái cho checkbox "Làm ngoài giờ"
     const [isOvertime, setIsOvertime] = useState(false);
+
+    // MỚI: Sử dụng hook để lấy tỷ lệ hoa hồng từ Firebase
+    const { defaultRevenuePercentage, overtimePercentage, isLoading: ratesLoading } = useCommissionRates(); //
 
     useEffect(() => {
         const fetchAllUsers = async () => {
@@ -90,9 +96,6 @@ const CreateReportScreen = () => {
             if (!currentUser) return;
             try {
                 const usersRef = collection(db, 'users');
-                // Lấy tất cả user có role là 'employee' (giả định bạn muốn chỉ nhân viên)
-                // Nếu muốn lấy tất cả user trừ admin, bỏ where clause hoặc thêm 'admin' nếu có.
-                // const q = query(usersRef, where('role', '==', 'employee')); // Lấy tất cả user là employee
                 const q = query(usersRef);
                 const querySnapshot = await getDocs(q);
 
@@ -151,8 +154,8 @@ const CreateReportScreen = () => {
             });
             return res.data.secure_url;
         } catch (error) {
-            console.error('Lỗi tải ảnh:', error);
-            Alert.alert('Lỗi tải ảnh', 'Không thể tải ảnh lên. Vui lòng thử lại.');
+            console.error('Lỗi tải ảnh:', error); //
+            Alert.alert('Lỗi tải ảnh', 'Không thể tải ảnh lên. Vui lòng thử lại.'); //
             return null;
         }
     };
@@ -167,6 +170,11 @@ const CreateReportScreen = () => {
             Alert.alert('Lỗi', 'Giá tiền không hợp lệ.');
             return;
         }
+        if (ratesLoading) { // MỚI: Chờ dữ liệu tỷ lệ tải xong
+            Alert.alert('Thông báo', 'Đang tải cài đặt tỷ lệ doanh thu, vui lòng thử lại sau.');
+            return;
+        }
+
         setUploading(true);
         let imageUrl = '';
         if (imageUri) {
@@ -181,11 +189,8 @@ const CreateReportScreen = () => {
             const currentUser = auth.currentUser;
             if (!currentUser) { throw new Error("Người dùng chưa đăng nhập."); }
 
-            // Lấy thông tin nhân viên hiện tại để lưu vào báo cáo
-            // Do AuthScreen đã lưu displayName vào user profile và Firestore users collection
-            const currentEmployeeName = currentUser.displayName || currentUser.email.split('@')[0];
+            const currentEmployeeName = currentUser.displayName || currentUser.email.split('@')[0]; //
 
-            // Lấy tên đối tác nếu có
             let partnerName = null;
             if (selectedPartner) {
                 const partner = employees.find(e => e.id === selectedPartner);
@@ -199,25 +204,35 @@ const CreateReportScreen = () => {
                 participantIds.push(selectedPartner);
             }
 
+            // Xác định trạng thái hóa đơn dựa trên vai trò của người dùng
+            const reportStatus = userRole === 'admin' ? 'approved' : 'pending'; //
+
+            // MỚI: Lấy tỷ lệ hoa hồng hiện tại từ hook
+            const currentRevenuePercentage = defaultRevenuePercentage;
+            const currentOvertimePercentage = overtimePercentage;
+
             const reportData = {
-                userId: currentUser.uid, // ID của người tạo báo cáo
+                userId: currentUser.uid,
                 userEmail: currentUser.email,
                 employeeName: currentEmployeeName,
                 price: numericPrice,
-                service: selectedServices.join(', '), //
-                note: note.trim(), // Đảm bảo ghi chú được trim
+                service: selectedServices.join(', '),
+                note: note.trim(),
                 paymentMethod: paymentMethod,
                 imageUrl: imageUrl,
                 createdAt: serverTimestamp(),
-                status: 'pending',
-                isOvertime: isOvertime, // MỚI: Lưu trạng thái làm ngoài giờ
+                status: reportStatus,
+                isOvertime: isOvertime,
                 partnerId: selectedPartner || null,
                 partnerName: partnerName,
                 participantIds: participantIds,
+                // MỚI: LƯU CÁC TỶ LỆ HOA HỒNG VÀO  MỚI
+                commissionRate: currentRevenuePercentage / 100, // Lưu dưới dạng thập phân (ví dụ: 0.10)
+                overtimeRate: currentOvertimePercentage / 100, // Lưu dưới dạng thập phân (ví dụ: 0.30)
             };
 
             await addDoc(collection(db, 'reports'), reportData);
-            Alert.alert('Thành công', 'Báo cáo đã được tạo và gửi đi chờ duyệt!');
+            Alert.alert('Thành công', ` đã được tạo và ${userRole === 'admin' ? 'đã duyệt' : 'gửi đi chờ duyệt'}!`); //
 
             // Reset form
             setPrice('');
@@ -227,11 +242,11 @@ const CreateReportScreen = () => {
             setPaymentMethod(PAYMENT_OPTIONS[0].value);
             setImageUri(null);
             setSelectedPartner(null);
-            setIsOvertime(false); // MỚI: Reset trạng thái làm ngoài giờ
+            setIsOvertime(false); //
             navigation.goBack();
         } catch (error) {
-            console.error('Lỗi khi gửi báo cáo:', error);
-            Alert.alert('Lỗi', 'Có lỗi xảy ra khi tạo báo cáo.');
+            console.error('Lỗi khi gửi hóa đơn:', error); //
+            Alert.alert('Lỗi', 'Có lỗi xảy ra khi tạo hóa đơn.'); //
         } finally {
             setUploading(false);
         }
@@ -242,15 +257,24 @@ const CreateReportScreen = () => {
 
     const partnerName = selectedPartner ? (employees.find(e => e.id === selectedPartner)?.displayName || 'Không rõ') : '-- Không chọn --';
 
+    // MỚI: Hiển thị loading indicator nếu ratesLoading là true
+    if (ratesLoading) {
+        return (
+            <View style={styles.loadingOverlay}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+                <Text style={styles.loadingText}>Đang tải cài đặt doanh thu...</Text>
+            </View>
+        );
+    }
+
     return (
         <View style={styles.fullScreenContainer}>
             <StatusBar style="dark" />
-            {/* MỚI: HEADER */}
             <View style={[styles.header, { paddingTop: insets.top }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={28} color={COLORS.black} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Tạo Báo Cáo Mới</Text>
+                <Text style={styles.headerTitle}>Tạo Hóa Đơn Mới</Text>
                 <View style={styles.headerRightPlaceholder} />
             </View>
 
@@ -272,7 +296,7 @@ const CreateReportScreen = () => {
                                     <Picker
                                         selectedValue={tempPartner}
                                         onValueChange={(itemValue) => setTempPartner(itemValue)}
-                                        itemStyle={styles.pickerItemText} // Giữ lại style này nếu bạn đã có
+                                        itemStyle={styles.pickerItemText}
                                     >
                                         <Picker.Item label="-- Không chọn --" value={null} />
                                         {employees.map(employee => (
@@ -314,7 +338,7 @@ const CreateReportScreen = () => {
                     ))}
                 </View>
 
-                {/* MỚI: Checkbox "Làm ngoài giờ" */}
+                {/* Checkbox "Làm ngoài giờ" */}
                 <View style={styles.card}>
                     <Text style={styles.label}>Trạng thái khác</Text>
                     <Checkbox
@@ -377,7 +401,7 @@ const CreateReportScreen = () => {
                     onPress={handleSubmitReport}
                     disabled={uploading}
                 >
-                    <Text style={styles.submitButtonText}>Tạo Báo cáo</Text>
+                    <Text style={styles.submitButtonText}>Tạo Hóa Đơn</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -397,6 +421,7 @@ const styles = StyleSheet.create({
         borderBottomColor: '#e0e0e0',
     },
     backButton: { padding: 5, marginRight: 10 },
+    submitButtonText: { color: COLORS.white, fontSize: 18, fontWeight: 600},
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.black },
     headerRightPlaceholder: { width: 48 }, // Để căn giữa tiêu đề
     scrollView: { flex: 1 },
@@ -440,11 +465,10 @@ const styles = StyleSheet.create({
         alignItems: 'center'
     },
     submitButtonDisabled: { backgroundColor: COLORS.gray }, // Sử dụng màu xám khi disabled
-    submitButtonText: { color: COLORS.white, fontSize: 18, fontWeight: 'bold' },
+    buttonText: { color: COLORS.white, fontSize: 18, fontWeight: 'bold' },
     modalBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.6)' },
     loadingText: { color: COLORS.white, marginTop: 15, fontSize: 16 },
 
-    // Checkbox & Radio Styles (từ code gốc của bạn, có chỉnh sửa màu cho phù hợp)
     checkboxGroup: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
     checkboxContainer: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, width: '48%' }, // Thêm width để căn 2 cột
     checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
@@ -454,10 +478,9 @@ const styles = StyleSheet.create({
     radioGroup: { flexDirection: 'column' }, // Đổi thành column để mỗi radio là 1 hàng
     radioButtonContainer: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
     radioCircle: { height: 22, width: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-    selectedRb: { width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.primary },
+    selectedRb: { width: 14, height: 14, borderRadius: 7, backgroundColor: COLORS.primary },
     radioButtonText: { fontSize: 16, color: '#333' },
 
-    // Image Picker Styles
     imagePicker: {
         height: 150,
         borderRadius: 10,
@@ -472,9 +495,8 @@ const styles = StyleSheet.create({
     imagePickerText: { marginTop: 10, color: COLORS.primary, fontSize: 15, fontWeight: 'bold' },
     pickedImageContainer: { position: 'relative', borderRadius: 10, overflow: 'hidden' },
     pickedImage: { width: '100%', height: 220, resizeMode: 'cover' },
-    removeImageButton: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 16, padding: 2 }, // Đã chỉnh padding và border radius
+    removeImageButton: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 16, padding: 2 },
 
-    // Picker Modal Styles
     pickerButton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Platform.OS === 'ios' ? 14 : 12, paddingHorizontal: 15, borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, backgroundColor: '#fcfcfc' },
     pickerButtonText: { fontSize: 16, color: '#333' },
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
@@ -483,7 +505,15 @@ const styles = StyleSheet.create({
     pickerWrapper: { backgroundColor: '#f0f2f5', borderRadius: 10, marginBottom: 20, ...Platform.select({ ios: { height: 200, justifyContent: 'center' } }) },
     modalDoneButton: { backgroundColor: COLORS.primary, borderRadius: 10, padding: 15, alignItems: 'center' },
     modalDoneButtonText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
-    pickerItemText: { color: COLORS.black, fontSize: 18 }, // Đảm bảo chữ trong picker có màu đen
+    pickerItemText: { color: COLORS.black, fontSize: 18 },
+
+    // MỚI: Styles cho loading overlay khi ratesLoading
+    loadingOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: COLORS.lightGray, // Hoặc màu nền phù hợp với ứng dụng của bạn
+    },
 });
 
 export default CreateReportScreen;

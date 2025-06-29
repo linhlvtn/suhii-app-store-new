@@ -23,7 +23,7 @@ const COLORS = {
     white: '#FFFFFF', 
     gray: '#888888', 
     lightGray: '#F5F5F5', 
-    primary: '#007bff', 
+    primary: '#007bff', // Màu xanh chủ đạo, có thể thay đổi thành #121212 nếu muốn đồng bộ theme Admin Panel
     pending: '#f39c12', 
     approved: '#28a745', 
     rejected: '#D32F2F', 
@@ -36,8 +36,12 @@ const getFormattedDate = (date) => {
     today.setHours(0,0,0,0); 
     const yesterday = new Date(today); 
     yesterday.setDate(yesterday.getDate() - 1); 
-    if (date.getTime() === today.getTime()) return 'Hôm nay'; 
-    if (date.getTime() === yesterday.getTime()) return 'Hôm qua'; 
+    
+    // So sánh ngày (không bao gồm giờ)
+    const dateToCompare = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    if (dateToCompare.getTime() === today.getTime()) return 'Hôm nay'; 
+    if (dateToCompare.getTime() === yesterday.getTime()) return 'Hôm qua'; 
     const day = String(date.getDate()).padStart(2, '0'); 
     const month = String(date.getMonth() + 1).padStart(2, '0'); 
     const year = date.getFullYear(); 
@@ -114,16 +118,22 @@ const StoreScreen = () => {
                 queries.push(where('createdAt', '>=', startOfDay), where('createdAt', '<=', endOfDay)); 
             } 
             const q = query(reportsRef, ...queries); 
-            const snapshots = await getDocs(q); 
-            setRawReports(snapshots.docs.map(d => ({ key: d.id, ...d.data() }))); 
+            const unsubscribe = onSnapshot(q, (querySnapshot) => { // Dùng onSnapshot để cập nhật real-time
+                setRawReports(querySnapshot.docs.map(d => ({ key: d.id, ...d.data() })));
+                setLoading(false); // Dừng loading ở đây
+            }, (error) => {
+                console.error("Lỗi khi lắng nghe hóa đơn:", error); 
+                if (error.code === 'failed-precondition') { 
+                    Alert.alert("Lỗi Cấu Hình", "Cơ sở dữ liệu của bạn thiếu chỉ mục cần thiết. Vui lòng kiểm tra console Firebase để tạo chỉ mục cho: reports collection, status, createdAt, participantIds."); 
+                } 
+                setLoading(false);
+            });
+            return unsubscribe; // Trả về trực tiếp hàm unsubscribe
         } catch (error) { 
-            console.error("Lỗi khi tải báo cáo:", error); 
-            if (error.code === 'failed-precondition') { 
-                Alert.alert("Lỗi Cấu Hình", "Cơ sở dữ liệu của bạn thiếu chỉ mục cần thiết."); 
-            } 
-        } finally { 
-            setLoading(false); 
-        }
+            console.error("Lỗi khi tải hóa đơn:", error); 
+            setLoading(false); // Đảm bảo loading được tắt nếu có lỗi ban đầu
+            return () => {}; // Trả về một hàm rỗng để tránh lỗi nếu không có unsubscribe thật
+        } 
     }, [user, userRole, statusFilter, selectedDate]);
     
     useEffect(() => { 
@@ -136,8 +146,24 @@ const StoreScreen = () => {
     }, [userRole]);
 
     useFocusEffect(useCallback(() => { 
-        if (userRole) fetchReports(); 
-    }, [userRole, fetchReports]));
+        let unsubscribeFunc; // Đổi tên biến để tránh nhầm lẫn
+        const setupListener = async () => {
+            if (userRole) {
+                // Đảm bảo await fetchReports() để nhận hàm unsubscribe thực sự
+                unsubscribeFunc = await fetchReports(); 
+            }
+        };
+        setupListener();
+
+        return () => {
+            // Chỉ gọi hàm unsubscribe nếu nó tồn tại và là một hàm
+            if (typeof unsubscribeFunc === 'function') {
+                unsubscribeFunc(); 
+            } else {
+                console.warn("unsubscribeFunc không phải là một hàm hoặc chưa được gán:", unsubscribeFunc);
+            }
+        };
+    }, [userRole, fetchReports])); // Dependencies vẫn như cũ
 
     useEffect(() => { 
         const grouped = rawReports.reduce((acc, report) => { 
@@ -162,7 +188,7 @@ const StoreScreen = () => {
     const handleUpdateStatus = async (reportId, newStatus) => { 
         Alert.alert(
             'Xác nhận', 
-            `Bạn có chắc muốn ${newStatus === 'approved' ? 'duyệt' : 'từ chối'} báo cáo này?`, 
+            `Bạn có chắc muốn ${newStatus === 'approved' ? 'duyệt' : 'từ chối'} hóa đơn này?`, 
             [
                 { text: "Hủy" }, 
                 { 
@@ -170,7 +196,7 @@ const StoreScreen = () => {
                     onPress: async () => { 
                         try { 
                             await updateDoc(doc(db, 'reports', reportId), { status: newStatus }); 
-                            fetchReports(); 
+                            // onSnapshot sẽ tự động cập nhật UI, không cần fetchReports lại
                         } catch (error) { 
                             Alert.alert("Lỗi", "Không thể cập nhật."); 
                         } 
@@ -184,14 +210,14 @@ const StoreScreen = () => {
     const handleBulkUpdate = async (newStatus) => { 
         const pendingReports = rawReports.filter(r => r.status === 'pending'); 
         if (pendingReports.length === 0) { 
-            Alert.alert("Thông báo", "Không có báo cáo nào đang ở trạng thái 'Chờ duyệt'."); 
+            Alert.alert("Thông báo", "Không có hóa đơn nào đang ở trạng thái 'Chờ duyệt'."); 
             return; 
         } 
         const actionText = newStatus === 'approved' ? 'duyệt' : 'từ chối'; 
         const reportCount = pendingReports.length; 
         Alert.alert( 
             `Xác nhận ${actionText} tất cả`, 
-            `Bạn có chắc muốn ${actionText} ${reportCount} báo cáo đang chờ?`, 
+            `Bạn có chắc muốn ${actionText} ${reportCount} hóa đơn đang chờ?`, 
             [ 
                 { text: "Hủy", style: "cancel" }, 
                 { 
@@ -205,12 +231,12 @@ const StoreScreen = () => {
                         }); 
                         try { 
                             await batch.commit(); 
-                            Alert.alert("Thành công", `Đã ${actionText} thành công ${reportCount} báo cáo.`); 
+                            Alert.alert("Thành công", `Đã ${actionText} thành công ${reportCount} hóa đơn.`); 
                         } catch (error) { 
                             console.error("Lỗi khi cập nhật hàng loạt: ", error); 
-                            Alert.alert("Lỗi", "Không thể cập nhật tất cả báo cáo."); 
+                            Alert.alert("Lỗi", "Không thể cập nhật tất cả hóa đơn."); 
                         } finally { 
-                            fetchReports(); 
+                            // onSnapshot sẽ tự động cập nhật UI, không cần fetchReports lại
                         } 
                     }, 
                     style: newStatus === 'rejected' ? 'destructive' : 'default' 
@@ -222,7 +248,7 @@ const StoreScreen = () => {
     const handleDelete = (reportId) => { 
         Alert.alert(
             "Xác nhận xóa", 
-            "Bạn có chắc muốn xóa báo cáo này vĩnh viễn?", 
+            "Bạn có chắc muốn xóa hóa đơn này vĩnh viễn?", 
             [
                 { text: "Hủy" }, 
                 { 
@@ -230,9 +256,9 @@ const StoreScreen = () => {
                     onPress: async () => { 
                         try { 
                             await deleteDoc(doc(db, 'reports', reportId)); 
-                            fetchReports(); 
+                            // onSnapshot sẽ tự động cập nhật UI, không cần fetchReports lại
                         } catch (error) { 
-                            Alert.alert("Lỗi", "Không thể xóa báo cáo."); 
+                            Alert.alert("Lỗi", "Không thể xóa hóa đơn."); 
                         } 
                     }, 
                     style: 'destructive' 
@@ -269,20 +295,49 @@ const StoreScreen = () => {
         };
         const statusInfo = statusMap[item.status] || { icon: 'help-circle', color: COLORS.gray };
         
-        // Logic cho phép chỉnh sửa: Admin chỉ sửa báo cáo pending. Nhân viên chỉ sửa báo cáo của mình và pending.
+        // Logic cho phép chỉnh sửa: Admin chỉ sửa hóa đơn pending. Nhân viên chỉ sửa hóa đơn của mình và pending.
         const canEdit = userRole === 'admin' ? item.status === 'pending' : (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
-        // Logic cho phép xóa: Admin có thể xóa bất kỳ báo cáo nào. Nhân viên chỉ xóa báo cáo của mình và pending.
+        // Logic cho phép xóa: Admin có thể xóa bất kỳ hóa đơn nào. Nhân viên chỉ xóa hóa đơn của mình và pending.
         const canDelete = userRole === 'admin' || (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
         
-        // --- BẮT ĐẦU PHẦN CẦN SỬA ĐỔI ---
-
-        // Tính toán số người tham gia (người tạo + người làm cùng nếu có)
-        // Đảm bảo item.participantIds tồn tại và là một mảng
-        const numberOfParticipants = (item.participantIds && Array.isArray(item.participantIds)) ? item.participantIds.length : 1;
+        // MỚI: Tính toán số người tham gia (người tạo + người làm cùng nếu có)
+        const numberOfParticipants = (item.participantIds && Array.isArray(item.participantIds) && item.participantIds.length > 0) ? item.participantIds.length : 1;
         
-        // Tính toán doanh thu được chia
+        // MỚI: Tính toán doanh thu được chia (từ giá gốc)
         const originalPrice = item.price || 0;
         const sharedPrice = numberOfParticipants > 0 ? originalPrice / numberOfParticipants : originalPrice;
+
+        // MỚI: Lấy tỷ lệ hoa hồng từ hóa đơn, hoặc dùng mặc định nếu không có (cho hóa đơn cũ)
+        const commissionRate = item.commissionRate !== undefined ? item.commissionRate : 0.10; 
+        const overtimeRate = item.overtimeRate !== undefined ? item.overtimeRate : 0.30;   
+
+        // MỚI: Tính toán doanh thu thực nhận của người dùng hiện tại từ hóa đơn này
+        let actualReceivedRevenueText = null;
+        if (item.status === 'approved' && user?.uid) { // Chỉ tính nếu hóa đơn được duyệt và có user đăng nhập
+            let actualPerReport = 0;
+            // Nếu hóa đơn này có người dùng hiện tại là người tạo hoặc partner
+            if (item.userId === user.uid || item.partnerId === user.uid) {
+                if (item.isOvertime) {
+                    actualPerReport = sharedPrice * overtimeRate; 
+                } else {
+                    actualPerReport = sharedPrice * commissionRate; 
+                }
+            } else if (userRole === 'admin') { // Nếu là admin, hiển thị hoa hồng của người tạo chính
+                // Đây là trường hợp admin xem hóa đơn không phải của mình, và muốn xem hoa hồng của người tạo hóa đơn
+                if (item.isOvertime) {
+                    actualPerReport = originalPrice * overtimeRate; // Hoa hồng tính trên giá gốc cho người tạo
+                } else {
+                    actualPerReport = originalPrice * commissionRate; // Hoa hồng tính trên giá gốc cho người tạo
+                }
+            }
+
+            if (actualPerReport > 0) {
+                actualReceivedRevenueText = actualPerReport.toLocaleString('vi-VN');
+            }
+        }
+
+        // MỚI: Lấy tỷ lệ ngoài giờ để hiển thị
+        const displayOvertimeRate = item.overtimeRate !== undefined ? (item.overtimeRate * 100).toFixed(0) : '30'; 
 
         return (
             <SwipeRow 
@@ -328,7 +383,8 @@ const StoreScreen = () => {
                                 <Text style={styles.serviceText} numberOfLines={2}>
                                     {item.service || ''}
                                 </Text>
-                                {(userRole === 'employee' && (canEdit || canDelete)) && ( 
+                                {/* Logic hiển thị Menu cho Employee */}
+                                {userRole === 'employee' && (canEdit || canDelete) && ( 
                                     <Menu>
                                         <MenuTrigger style={styles.menuTrigger}>
                                             <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
@@ -339,10 +395,30 @@ const StoreScreen = () => {
                                                     <Text>Chỉnh sửa</Text>
                                                 </MenuOption>
                                             )}
-                                            {canEdit && canDelete && userRole === 'employee' && (
+                                            {canEdit && canDelete && (
                                                 <View style={styles.divider} />
                                             )}
-                                            {canDelete && userRole === 'employee' && (
+                                            {canDelete && (
+                                                <MenuOption onSelect={() => handleDelete(item.key)}>
+                                                    <Text style={{ color: 'red' }}>Xóa</Text>
+                                                </MenuOption>
+                                            )}
+                                        </MenuOptions>
+                                    </Menu>
+                                )}
+                                {/* Logic hiển thị Menu cho Admin (Chỉ Edit/Delete) */}
+                                {userRole === 'admin' && (canEdit || canDelete) && (
+                                    <Menu>
+                                        <MenuTrigger style={styles.menuTrigger}>
+                                            <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
+                                        </MenuTrigger>
+                                        <MenuOptions customStyles={menuOptionsStyles}>
+                                            {canEdit && ( // Admin chỉ có thể edit pending reports
+                                                <MenuOption onSelect={() => handleEdit(item)}>
+                                                    <Text>Chỉnh sửa</Text>
+                                                </MenuOption>
+                                            )}
+                                            {canDelete && ( // Admin có thể xóa bất kỳ report nào
                                                 <MenuOption onSelect={() => handleDelete(item.key)}>
                                                     <Text style={{ color: 'red' }}>Xóa</Text>
                                                 </MenuOption>
@@ -353,18 +429,21 @@ const StoreScreen = () => {
                             </View>
                             <View style={styles.priceContainer}>
                                 <Text style={styles.sharedPriceText}>
-                                    {sharedPrice.toLocaleString('vi-VN')} VNĐ
+                                    {(item.price || 0).toLocaleString('vi-VN')}₫
                                 </Text>
                                 {item.isOvertime && (
-                                    <Text style={styles.overtimeText}>(+30%)</Text>
+                                    <Text style={styles.overtimeText}>{`(+${displayOvertimeRate}%)`}</Text>
                                 )}
                             </View>
-                            {/* Dòng hiển thị doanh thu gốc (nhỏ hơn, màu nhạt hơn) */}
-                            {numberOfParticipants > 1 && ( // Chỉ hiển thị nếu có chia sẻ (nhiều hơn 1 người)
-                                <Text style={styles.originalPriceNote}>
-                                    Doanh thu: {originalPrice.toLocaleString('vi-VN')} VNĐ
-                                </Text>
-                            )}
+                            
+                            {/* MỚI: Hiển thị doanh thu thực nhận */}
+                            {actualReceivedRevenueText && item.status === 'approved' ? (
+                                <View style={styles.infoRow}>
+                                    <Ionicons name="cash" size={16} color={COLORS.approved} />
+                                    <Text style={styles.infoText}>Thực nhận: {actualReceivedRevenueText}₫</Text>
+                                </View>
+                            ) : null}
+
                             <View style={styles.infoRow}>
                                 <Ionicons name="people-outline" size={16} color={COLORS.gray} />
                                 <Text style={styles.infoText}>
@@ -405,9 +484,14 @@ const StoreScreen = () => {
     };
 
     const renderSectionHeader = ({ section }) => {
-        const totalSectionRevenue = section.data.reduce((sum, item) => (
-            item.status === 'approved' ? sum + (item.price || 0) : sum
-        ), 0);
+        // Tổng doanh thu của section nên là tổng giá tiền gốc (price) của các hóa đơn đã duyệt
+        const totalSectionRevenue = section.data.reduce((sum, item) => {
+            if (item.status === 'approved') {
+                return sum + (item.price || 0); 
+            }
+            return sum;
+        }, 0);
+
         return (
             <View style={styles.sectionHeader}>
                 <Text style={styles.sectionHeaderText}>{section.title}</Text>
@@ -543,7 +627,7 @@ const StoreScreen = () => {
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyText}>Không có báo cáo nào.</Text>
+                            <Text style={styles.emptyText}>Không có hóa đơn nào.</Text>
                         </View>
                     }
                     stickySectionHeadersEnabled
@@ -611,7 +695,7 @@ const styles = StyleSheet.create({
     },
     originalPriceNote: { // Style cho số tiền gốc
         fontSize: 12, // Nhỏ hơn
-        color: COLORS.rejected, // Màu nhạt hơn
+        color: COLORS.secondary, // Màu nhạt hơn
         marginTop: 2, // Cách dòng trên một chút
     },
     overtimeText: { marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: COLORS.primary },

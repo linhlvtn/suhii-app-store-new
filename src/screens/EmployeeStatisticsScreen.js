@@ -7,12 +7,19 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
-
-import TimeFilterSegment from './Statistics/components/TimeFilterSegment';
-import SummaryCard from './Statistics/components/SummaryCard';
-import StatsChart from './Statistics/components/StatsChart';
-import ServicePieChart from './Statistics/components/ServicePieChart';
 import LottieView from 'lottie-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
+import moment from 'moment';
+import 'moment/locale/vi'; // Import tiếng Việt
+moment.locale('vi');
+
+// Import các component thống kê
+import SummaryCard from '../screens/Statistics/components/SummaryCard';
+import TimeFilterSegment from '../screens/Statistics/components/TimeFilterSegment';
+import StatsChart from '../screens/Statistics/components/StatsChart';
+import ServicePieChart from '../screens/Statistics/components/ServicePieChart';
+import RankItem from '../screens/Statistics/components/RankItem';
 
 LocaleConfig.locales['vi'] = { monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'], dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'], today: 'Hôm nay' };
 LocaleConfig.defaultLocale = 'vi';
@@ -87,7 +94,8 @@ const getFormattedDateKey = (date, period) => {
     switch (period) {
         case 'today':
         case 'custom':
-            return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            // Sửa lỗi ở đây: Với "today" hoặc "custom", chúng ta muốn thống kê theo giờ
+            return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
         case 'week':
             return date.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
         case 'month':
@@ -102,7 +110,7 @@ const getFormattedDateKey = (date, period) => {
 const initializeDailyData = (startDate, endDate, period) => {
     const data = {};
     let currentDate = new Date(startDate);
-    currentDate.setHours(0,0,0,0);
+    currentDate.setHours(0, 0, 0, 0);
 
     if (period === 'today' || period === 'custom') {
         for (let i = 0; i < 24; i++) {
@@ -130,8 +138,9 @@ const initializeDailyData = (startDate, endDate, period) => {
     return data;
 };
 
+
 const EmployeeStatisticsScreen = () => {
-    const { userRole, user: authUser } = useAuth();
+    const { userRole, user: authUser, users } = useAuth(); // Lấy users từ AuthContext
     const navigation = useNavigation();
     const route = useRoute();
     
@@ -144,11 +153,16 @@ const EmployeeStatisticsScreen = () => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
 
+    // States for statistics - Đảm bảo tất cả được khởi tạo an toàn
+    const [totalRevenue, setTotalRevenue] = useState(0);
+    const [actualRevenue, setActualRevenue] = useState(0);
     const [summaryData, setSummaryData] = useState({ totalRevenue: 0, totalReports: 0 });
     const [chartData, setChartData] = useState({ labels: [], datasets: [{ data: [] }] });
     const [pieChartData, setPieChartData] = useState([]);
-    const [actualRevenue, setActualRevenue] = useState(0);
+    const [employeeRankings, setEmployeeRankings] = useState([]);
+    // Dòng bị thiếu/gây lỗi trước đó
     const [personalChartData, setPersonalChartData] = useState({ labels: [], datasets: [{ data: [] }] });
+
 
     const handleBackButtonPress = () => {
         if (userRole === 'admin' && route.params?.employeeId) {
@@ -178,27 +192,44 @@ const EmployeeStatisticsScreen = () => {
             const querySnapshot = await getDocs(q);
             const fetchedReports = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
 
-            let totalRevenue = 0;
-            let calculatedActualRevenue = 0;
+            // Reset stats for new calculation
+            let currentTotalRevenue = 0;
+            let currentCalculatedActualRevenue = 0;
             const dailyRevenueForChart = initializeDailyData(startDate.toDate(), endDate.toDate(), selectedPeriod);
             const serviceCounts = {};
+
+            // Đảm bảo users là một mảng rỗng nếu nó null/undefined
+            const currentUsers = users || []; 
+            const employeeRevenueMap = new Map(currentUsers.map(u => [u.id, { total: 0, personal: 0, shared: 0, commission: 0, name: u.displayName || u.email.split('@')[0] }]));
 
             fetchedReports.forEach(report => {
                 const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
                 const reportPrice = report.price || 0;
 
+                // Lấy tỷ lệ hoa hồng từ hóa đơn, hoặc dùng mặc định nếu không có (cho hóa đơn cũ)
+                const commissionRate = report.commissionRate !== undefined ? report.commissionRate : 0.10; 
+                const overtimeRate = report.overtimeRate !== undefined ? report.overtimeRate : 0.30;   
+
                 let revenuePerThisEmployeeActual = 0;
                 if (report.status === 'approved') {
-                    if (report.isOvertime && (report.userId === employeeId || report.partnerId === employeeId)) {
-                        revenuePerThisEmployeeActual = reportPrice * 0.30;
-                    } else if (report.userId === employeeId || report.partnerId === employeeId) {
-                        const personalShare = reportPrice / numParticipants;
-                        revenuePerThisEmployeeActual = personalShare * 0.10;
+                    if (report.isOvertime) {
+                        // Nếu là hóa đơn ngoài giờ, và nhân viên hiện tại là người tạo hoặc partner
+                        // Tính toán theo overtimeRate từ hóa đơn, hoặc 0.30 mặc định
+                        if (report.userId === employeeId || report.partnerId === employeeId) {
+                            revenuePerThisEmployeeActual = reportPrice * overtimeRate;
+                        }
+                    } else {
+                        // Nếu là hóa đơn thường, và nhân viên hiện tại là người tạo hoặc partner
+                        // Tính toán theo commissionRate từ hóa đơn, hoặc 0.10 mặc định
+                        if (report.userId === employeeId || report.partnerId === employeeId) {
+                            const personalShare = reportPrice / numParticipants;
+                            revenuePerThisEmployeeActual = personalShare * commissionRate;
+                        }
                     }
-                    calculatedActualRevenue += revenuePerThisEmployeeActual;
+                    currentCalculatedActualRevenue += revenuePerThisEmployeeActual; 
 
                     const personalRevenueShare = (report.userId === employeeId || report.partnerId === employeeId) ? reportPrice / numParticipants : 0;
-                    totalRevenue += personalRevenueShare;
+                    currentTotalRevenue += personalRevenueShare; 
 
                     const dateKey = getFormattedDateKey(report.createdAt, selectedPeriod);
                     if (dailyRevenueForChart[dateKey] !== undefined) {
@@ -212,18 +243,40 @@ const EmployeeStatisticsScreen = () => {
                         });
                     }
                 }
+
+                // Cập nhật xếp hạng nhân viên (employeeRevenueMap)
+                if (report.participantIds) {
+                    report.participantIds.forEach(participantId => {
+                        const employeeStats = employeeRevenueMap.get(participantId);
+                        if (employeeStats) {
+                            const numReportParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1; 
+                            const pricePerParticipant = (report.price || 0) / numReportParticipants;
+
+                            employeeStats.total += (report.price || 0); 
+                            if (numReportParticipants > 1) {
+                                employeeStats.shared += pricePerParticipant;
+                            } else {
+                                employeeStats.personal += pricePerParticipant;
+                            }
+                            // Tính hoa hồng cho từng nhân viên trong hóa đơn đó
+                            employeeStats.commission += pricePerParticipant * (report.isOvertime ? overtimeRate : commissionRate); 
+                            employeeRevenueMap.set(participantId, employeeStats);
+                        }
+                    });
+                }
             });
 
             setReports(fetchedReports);
             setSummaryData({
-                totalRevenue: totalRevenue || 0,
+                totalRevenue: currentTotalRevenue || 0,
                 totalReports: fetchedReports.filter(r => r.status === 'approved').length || 0,
             });
-            setActualRevenue(calculatedActualRevenue || 0);
+            setActualRevenue(currentCalculatedActualRevenue || 0); 
             setChartData({
                 labels: Object.keys(dailyRevenueForChart),
                 datasets: [{ data: Object.values(dailyRevenueForChart) }],
             });
+            // Đảm bảo personalChartData cũng được set
             setPersonalChartData({
                 labels: Object.keys(dailyRevenueForChart),
                 datasets: [{ data: Object.values(dailyRevenueForChart) }]
@@ -238,13 +291,19 @@ const EmployeeStatisticsScreen = () => {
                 legendFontSize: 15,
             })));
 
+            // Cập nhật xếp hạng nhân viên
+            const sortedEmployeeRankings = Array.from(employeeRevenueMap.values())
+                .sort((a, b) => b.commission - a.commission); 
+            setEmployeeRankings(sortedEmployeeRankings);
+
         } catch (error) {
-            console.error("Lỗi khi tải báo cáo thống kê cá nhân:", error);
+            console.error("Lỗi khi tải hóa đơn thống kê cá nhân:", error);
             Alert.alert("Lỗi", "Không thể tải dữ liệu thống kê cá nhân.");
         } finally {
             setLoading(false);
         }
-    }, [employeeId, selectedPeriod, selectedDate, userRole]);
+    }, [employeeId, selectedPeriod, selectedDate, userRole, users, authUser]);
+
 
     useEffect(() => {
         if (authUser && (userRole === 'employee' || employeeId)) {
@@ -280,16 +339,24 @@ const EmployeeStatisticsScreen = () => {
         const participantText = participants.length > 0 ? participants.join(' & ') : 'N/A';
 
         let actualReceivedRevenueText = null;
-        if (userRole === 'admin' && item.status === 'approved') {
+        if (item.status === 'approved') { 
              const numParticipants = (item.participantIds && Array.isArray(item.participantIds) && item.participantIds.length > 0) ? item.participantIds.length : 1;
              const reportPrice = item.price || 0;
              let actualPerReport = 0;
-             if (item.isOvertime && (item.userId === employeeId || item.partnerId === employeeId)) {
-                 actualPerReport = reportPrice * 0.30;
-             } else if (item.userId === employeeId || item.partnerId === employeeId) {
-                 const personalShare = reportPrice / numParticipants;
-                 actualPerReport = personalShare * 0.10;
+
+             // Lấy tỷ lệ hoa hồng từ hóa đơn, hoặc dùng mặc định nếu không có (cho hóa đơn cũ)
+             const commissionRate = item.commissionRate !== undefined ? item.commissionRate : 0.10; 
+             const overtimeRate = item.overtimeRate !== undefined ? item.overtimeRate : 0.30;   
+
+             if (item.userId === employeeId || item.partnerId === employeeId) {
+                if (item.isOvertime) {
+                    actualPerReport = reportPrice * overtimeRate;
+                } else {
+                    const personalShare = reportPrice / numParticipants;
+                    actualPerReport = personalShare * commissionRate;
+                }
              }
+
              if (actualPerReport > 0) {
                 actualReceivedRevenueText = actualPerReport.toLocaleString('vi-VN');
              }
@@ -300,6 +367,9 @@ const EmployeeStatisticsScreen = () => {
             month: '2-digit',
             year: 'numeric'
         }) : 'Không rõ';
+
+        // Lấy tỷ lệ ngoài giờ để hiển thị trên UI item
+        const displayOvertimeRate = item.overtimeRate !== undefined ? (item.overtimeRate * 100).toFixed(0) : '30'; 
 
         return (
             <TouchableWithoutFeedback>
@@ -327,7 +397,7 @@ const EmployeeStatisticsScreen = () => {
                                 {(item.price || 0).toLocaleString('vi-VN')}₫
                             </Text>
                             {item.isOvertime && (
-                                <Text style={styles.reportOvertimeText}>(+30%)</Text>
+                                <Text style={styles.reportOvertimeText}>{`(+${displayOvertimeRate}%)`}</Text> 
                             )}
                         </View>
                         
@@ -335,7 +405,7 @@ const EmployeeStatisticsScreen = () => {
                             <View style={styles.reportInfoRow}>
                                 <Ionicons name="cash" size={16} color={COLORS.success} />
                                 <Text style={styles.reportActualRevenueText}>
-                                    {actualReceivedRevenueText}
+                                    {actualReceivedRevenueText}₫
                                 </Text>
                             </View>
                         ) : null}
@@ -418,9 +488,9 @@ const EmployeeStatisticsScreen = () => {
                     <>
                         <View style={styles.summaryCardWrapper}>
                             <SummaryCard
-                                title="Tổng doanh thu cá nhân"
+                                title="Doanh thu cá nhân"
                                 totalRevenue={summaryData.totalRevenue}
-                                totalReports={summaryData.totalReports}
+                                totalReports={summaryData.totalReports} 
                                 isDailyReport={selectedPeriod === 'today' || selectedPeriod === 'custom'}
                                 customCardWidth="100%"
                                 chartData={personalChartData}
@@ -449,9 +519,21 @@ const EmployeeStatisticsScreen = () => {
                         />
                         <ServicePieChart data={pieChartData} title="Tỷ lệ dịch vụ theo cá nhân" style={styles.chartCardMargin} />
 
+                        {employeeRankings.length > 0 && (
+                            <View style={styles.card}>
+                                <Text style={styles.cardTitle}>Xếp hạng nhân viên (theo hoa hồng)</Text>
+                                {employeeRankings.map((employee, index) => (
+                                    <TouchableOpacity key={employee.id || index} onPress={() => navigation.navigate('EmployeeStatistics', { employeeId: employee.id, employeeName: employee.name })}>
+                                        <RankItem item={{name: employee.name, revenue: employee.commission, clients: 0}} index={index} />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+
+
                         {reports.length > 0 ? (
                             <View style={styles.reportsListSection}>
-                                <Text style={styles.reportsListTitle}>Danh sách báo cáo trong kỳ</Text>
+                                <Text style={styles.reportsListTitle}>Danh sách hóa đơn trong kỳ</Text>
                                 <FlatList
                                     data={reports}
                                     keyExtractor={(item) => item.id}
@@ -462,7 +544,7 @@ const EmployeeStatisticsScreen = () => {
                             </View>
                         ) : (
                             <View style={styles.emptyReportsContainer}>
-                                <Text style={styles.emptyReportsText}>Không có báo cáo nào trong kỳ này.</Text>
+                                <Text style={styles.emptyReportsText}>Không có hóa đơn nào trong kỳ này.</Text>
                             </View>
                         )}
                     </>
@@ -474,6 +556,47 @@ const EmployeeStatisticsScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.lightGray },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: COLORS.lightGray,
+    },
+    lottie: {
+        width: 150,
+        height: 150,
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: COLORS.gray,
+    },
+    screenTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: COLORS.black,
+        marginVertical: 20,
+        textAlign: 'center',
+    },
+    card: {
+        backgroundColor: COLORS.white,
+        borderRadius: 12,
+        padding: 16,
+        // marginBottom: 16, // Giữ lại nếu muốn card có margin bottom riêng
+        marginHorizontal: 15,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
+        boxSizing: 'border-box',
+    },
+    cardTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.black,
+        marginBottom: 10,
+    },
     header: { 
         flexDirection: 'row', 
         alignItems: 'center', 
@@ -494,7 +617,6 @@ const styles = StyleSheet.create({
     timeFilterSegmentMargin: { marginHorizontal: 20, marginBottom: 15 },
     titleTouchable: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
     subHeaderTitle: { fontSize: 18, fontWeight: '600', color: COLORS.secondary },
-    loadingContainer: { height: 400, justifyContent: 'center', alignItems: 'center' },
     datePickerBackdrop: { 
         flex: 1, 
         justifyContent: 'center', 
@@ -648,9 +770,9 @@ const styles = StyleSheet.create({
         height: 150,
     },
     loadingText: {
-        marginTop: 0,
+        marginTop: 0, 
         fontSize: 16,
-        color: COLORS.secondary,
+        color: COLORS.secondary, 
     },
 });
 
