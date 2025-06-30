@@ -1,31 +1,30 @@
 // src/screens/EditReportScreen.js
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, ActivityIndicator, Platform, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, Platform, TouchableWithoutFeedback } from 'react-native'; // Xóa ActivityIndicator
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
-import { db, auth } from '../../firebaseConfig'; // Import auth
-import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs as getFirestoreDocs } from 'firebase/firestore'; // Import Firestore functions
+import { db, auth } from '../../firebaseConfig'; 
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs as getFirestoreDocs } from 'firebase/firestore'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { useRoute, useNavigation } from '@react-navigation/native'; // Import useNavigation
+import { useRoute, useNavigation } from '@react-navigation/native'; 
 import { Picker } from '@react-native-picker/picker';
-// import LottieView from 'lottie-react-native';
+// import LottieView from 'lottie-react-native'; // <-- XÓA DÒNG NÀY HOẶC ĐẢM BẢO NÓ ĐƯỢC COMMENT
 
-// --- Hằng số màu sắc ---
-// Import từ theme.js nếu có
-// import { COLORS } from '../../constants/theme'; 
+import LoadingOverlay from '../components/LoadingOverlay'; // <-- THÊM DÒNG NÀY
+
 const COLORS = {
     black: '#121212',
     white: '#FFFFFF',
     gray: '#888888',
     lightGray: '#F5F5F5',
-    primary: '#121212', // Sử dụng màu đen làm primary theo giao diện mới của bạn
+    primary: '#121212', 
     pending: '#f39c12',
     approved: '#28a745',
     rejected: '#D32F2F',
-    overtime: '#6a0dad', // Thêm màu cho trạng thái làm ngoài giờ
+    overtime: '#6a0dad', 
 };
 
 // --- CÁC COMPONENT CON (Checkbox, RadioButton) ---
@@ -90,22 +89,18 @@ const EditReportScreen = () => {
     const [uploading, setUploading] = useState(false);
     const [isFetchingData, setIsFetchingData] = useState(true);
 
-    // Trạng thái cho checkbox "Làm ngoài giờ"
     const [isOvertime, setIsOvertime] = useState(false);
 
-    // State cho danh sách người dùng (đối tác)
     const [users, setUsers] = useState([]);
     const [loadingUsers, setLoadingUsers] = useState(true);
     const [selectedPartnerId, setSelectedPartnerId] = useState(null);
     const [isPartnerPickerVisible, setPartnerPickerVisible] = useState(false);
-    const [tempPartner, setTempPartner] = useState(null); // <-- KHAI BÁO tempPartner Ở ĐÂY
+    const [tempPartner, setTempPartner] = useState(null); 
 
-    // Fetch Report Data and Users on component mount
     useEffect(() => {
         const fetchReportAndUsers = async () => {
             try {
                 setIsFetchingData(true);
-                // Fetch Report Data
                 const docRef = doc(db, 'reports', reportId);
                 const docSnap = await getDoc(docRef);
 
@@ -127,16 +122,14 @@ const EditReportScreen = () => {
                     setOriginalImageUrl(data.imageUrl || null);
                     setIsOvertime(data.isOvertime || false);
                     setSelectedPartnerId(data.partnerId || null);
-                    setTempPartner(data.partnerId || null); // <-- KHỞI TẠO tempPartner VỚI GIÁ TRỊ CŨ
+                    setTempPartner(data.partnerId || null); 
                 } else {
                     Alert.alert("Lỗi", "Không tìm thấy hóa đơn.");
                     navigation.goBack();
                     return;
                 }
 
-                // Fetch Users Data for partner picker
                 const usersRef = collection(db, 'users');
-                // const q = query(usersRef, where('role', '==', 'employee'));
                 const q = query(usersRef);
                 const querySnapshot = await getFirestoreDocs(q);
                 const fetchedUsers = [];
@@ -307,29 +300,6 @@ const EditReportScreen = () => {
 
     const partnerDisplayName = selectedPartnerId ? (users.find(u => u.id === selectedPartnerId)?.displayName || 'Không rõ') : '-- Không chọn --';
 
-    if (isFetchingData) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
-        );
-    }
-
-     if (isFetchingData || loadingUsers) { // Trong EditReportScreen
-    // hoặc if (uploading) { // Trong CreateReportScreen (nếu bạn chỉ muốn lottie cho uploading)
-        return (
-            <View style={styles.loadingOverlayContainer}> {/* Style mới */}
-                {/* <LottieView
-                    source={require('../../assets/loading.json')} // Thay đổi đường dẫn
-                    autoPlay
-                    loop
-                    style={styles.loadingOverlayLottie}
-                /> */}
-                <Text style={styles.loadingOverlayText}>Đang tải dữ liệu...</Text> {/* Hoặc "Đang xử lý..." */}
-            </View>
-        );
-    }
-
     return (
         <View style={[styles.fullScreenContainer]}>
             <StatusBar style="dark" />
@@ -341,17 +311,11 @@ const EditReportScreen = () => {
                 <View style={styles.headerRightPlaceholder} />
             </View>
 
-            <Modal transparent={true} animationType="fade" visible={uploading}>
-                <View style={styles.modalBackground}>
-                    <LottieView
-                        source={require('../../assets/loading.json')} // Thay đổi đường dẫn
-                        autoPlay
-                        loop
-                        style={styles.modalLottie} // Style cho lottie trong modal
-                    />
-                    <Text style={styles.modalLoadingText}>Đang cập nhật...</Text>
-                </View>
-            </Modal>
+            {/* Sử dụng LoadingOverlay cho cả isFetchingData và uploading */}
+            <LoadingOverlay 
+                isVisible={isFetchingData || uploading} 
+                message={isFetchingData ? "Đang tải dữ liệu..." : "Đang cập nhật..."} 
+            />
 
             {/* Modal cho Picker Người làm cùng */}
             <Modal transparent={true} visible={isPartnerPickerVisible} animationType="slide" onRequestClose={() => setPartnerPickerVisible(false)}>
@@ -422,7 +386,8 @@ const EditReportScreen = () => {
                 <View style={styles.card}>
                     <Text style={styles.label}>Người làm cùng (Tùy chọn)</Text>
                     {loadingUsers ? (
-                        <ActivityIndicator size="small" color={COLORS.primary} />
+                        // Có thể hiển thị ActivityIndicator nhỏ ở đây nếu muốn, hoặc để LoadingOverlay chính xử lý
+                        <Text style={styles.pickerButtonText}>Đang tải người dùng...</Text>
                     ) : (
                         <TouchableOpacity
                             style={styles.pickerButton}
@@ -490,7 +455,7 @@ const EditReportScreen = () => {
 
 const styles = StyleSheet.create({
     fullScreenContainer: { flex: 1, backgroundColor: COLORS.lightGray },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.lightGray },
+    // loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.lightGray }, // Xóa hoặc sửa đổi
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -548,8 +513,8 @@ const styles = StyleSheet.create({
     },
     submitButtonDisabled: { backgroundColor: COLORS.gray },
     submitButtonText: { color: COLORS.white, fontSize: 18, fontWeight: 'bold' },
-    modalBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.6)' },
-    loadingText: { color: COLORS.white, marginTop: 15, fontSize: 16 },
+    // modalBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.6)' }, // Sẽ được quản lý bởi LoadingOverlay
+    // loadingText: { color: COLORS.white, marginTop: 15, fontSize: 16 }, // Sẽ được quản lý bởi LoadingOverlay
 
     // Checkbox & Radio Styles
     checkboxGroup: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
@@ -592,37 +557,38 @@ const styles = StyleSheet.create({
     modalDoneButtonText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
     pickerItemText: { color: COLORS.black, fontSize: 18 },
 
-    loadingOverlayContainer: { // Style cho màn hình loading overlay toàn bộ
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: COLORS.lightGray, // Màu nền của loading screen
-    },
-    loadingOverlayLottie: {
-        width: 150, // Kích thước của animation
-        height: 150,
-    },
-    loadingOverlayText: {
-        marginTop: 10,
-        fontSize: 16,
-        color: COLORS.secondary,
-    },
-    // Đối với modal loading khi submit
-    modalBackground: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    },
-    modalLottie: { // Style cho lottie trong modal
-        width: 100, // Nhỏ hơn một chút so với full screen loading
-        height: 100,
-    },
-    modalLoadingText: { // Style cho text loading trong modal
-        color: COLORS.white,
-        marginTop: 15,
-        fontSize: 16,
-    },
+    // Xóa/Sửa đổi các styles liên quan đến loading overlay toàn bộ và lottie cũ
+    // loadingOverlayContainer: { // Style cho màn hình loading overlay toàn bộ
+    //     flex: 1,
+    //     justifyContent: 'center',
+    //     alignItems: 'center',
+    //     backgroundColor: COLORS.lightGray, // Màu nền của loading screen
+    // },
+    // loadingOverlayLottie: {
+    //     width: 150, // Kích thước của animation
+    //     height: 150,
+    // },
+    // loadingOverlayText: {
+    //     marginTop: 10,
+    //     fontSize: 16,
+    //     color: COLORS.secondary,
+    // },
+    // // Đối với modal loading khi submit
+    // modalBackground: { // Đã comment ở trên
+    //     flex: 1,
+    //     alignItems: 'center',
+    //     justifyContent: 'center',
+    //     backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    // },
+    // modalLottie: { // Style cho lottie trong modal
+    //     width: 100, // Nhỏ hơn một chút so với full screen loading
+    //     height: 100,
+    // },
+    // modalLoadingText: { // Style cho text loading trong modal
+    //     color: COLORS.white,
+    //     marginTop: 15,
+    //     fontSize: 16,
+    // },
 });
 
 export default EditReportScreen;

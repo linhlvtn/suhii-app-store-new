@@ -20,6 +20,7 @@ import TimeFilterSegment from '../screens/Statistics/components/TimeFilterSegmen
 import StatsChart from '../screens/Statistics/components/StatsChart';
 import ServicePieChart from '../screens/Statistics/components/ServicePieChart';
 import RankItem from '../screens/Statistics/components/RankItem';
+import LoadingOverlay from '../components/LoadingOverlay'; // <-- Đảm bảo import LoadingOverlay
 
 LocaleConfig.locales['vi'] = { monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'], dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'], today: 'Hôm nay' };
 LocaleConfig.defaultLocale = 'vi';
@@ -40,23 +41,35 @@ const COLORS = {
 
 const getDateRange = (period, customDate = null) => {
     const now = new Date();
-    let startDate, endDate = new Date(now);
+    let startDate, endDate;
+
     if (period === 'custom' && customDate) {
         startDate = new Date(customDate);
         endDate = new Date(customDate);
     } else {
         switch (period) {
-            case 'today': startDate = new Date(now); break;
+            case 'today':
+                startDate = new Date(now);
+                endDate = new Date(now);
+                break;
             case 'week':
                 const dayOfWeek = now.getDay();
-                const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+                const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Lấy thứ Hai đầu tuần
                 startDate = new Date(now.setDate(diff));
                 endDate = new Date(startDate);
-                endDate.setDate(startDate.getDate() + 6);
+                endDate.setDate(startDate.getDate() + 6); // Kết thúc Chủ Nhật
                 break;
-            case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
-            case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
-            default: startDate = new Date(now);
+            case 'month':
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Ngày cuối cùng của tháng hiện tại
+                break;
+            case 'year':
+                startDate = new Date(now.getFullYear(), 0, 1);
+                endDate = new Date(now.getFullYear(), 11, 31); // Ngày cuối cùng của năm hiện tại
+                break;
+            default: // Mặc định là hôm nay nếu không nhận dạng được period
+                startDate = new Date(now);
+                endDate = new Date(now);
         }
     }
     startDate.setHours(0, 0, 0, 0);
@@ -94,7 +107,6 @@ const getFormattedDateKey = (date, period) => {
     switch (period) {
         case 'today':
         case 'custom':
-            // Sửa lỗi ở đây: Với "today" hoặc "custom", chúng ta muốn thống kê theo giờ
             return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
         case 'week':
             return date.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
@@ -140,7 +152,7 @@ const initializeDailyData = (startDate, endDate, period) => {
 
 
 const EmployeeStatisticsScreen = () => {
-    const { userRole, user: authUser, users } = useAuth(); // Lấy users từ AuthContext
+    const { userRole, user: authUser, users } = useAuth(); 
     const navigation = useNavigation();
     const route = useRoute();
     
@@ -153,14 +165,12 @@ const EmployeeStatisticsScreen = () => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
 
-    // States for statistics - Đảm bảo tất cả được khởi tạo an toàn
     const [totalRevenue, setTotalRevenue] = useState(0);
     const [actualRevenue, setActualRevenue] = useState(0);
     const [summaryData, setSummaryData] = useState({ totalRevenue: 0, totalReports: 0 });
     const [chartData, setChartData] = useState({ labels: [], datasets: [{ data: [] }] });
     const [pieChartData, setPieChartData] = useState([]);
     const [employeeRankings, setEmployeeRankings] = useState([]);
-    // Dòng bị thiếu/gây lỗi trước đó
     const [personalChartData, setPersonalChartData] = useState({ labels: [], datasets: [{ data: [] }] });
 
 
@@ -192,13 +202,11 @@ const EmployeeStatisticsScreen = () => {
             const querySnapshot = await getDocs(q);
             const fetchedReports = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
 
-            // Reset stats for new calculation
             let currentTotalRevenue = 0;
             let currentCalculatedActualRevenue = 0;
             const dailyRevenueForChart = initializeDailyData(startDate.toDate(), endDate.toDate(), selectedPeriod);
             const serviceCounts = {};
 
-            // Đảm bảo users là một mảng rỗng nếu nó null/undefined
             const currentUsers = users || []; 
             const employeeRevenueMap = new Map(currentUsers.map(u => [u.id, { total: 0, personal: 0, shared: 0, commission: 0, name: u.displayName || u.email.split('@')[0] }]));
 
@@ -206,24 +214,21 @@ const EmployeeStatisticsScreen = () => {
                 const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
                 const reportPrice = report.price || 0;
 
-                // Lấy tỷ lệ hoa hồng từ hóa đơn, hoặc dùng mặc định nếu không có (cho hóa đơn cũ)
                 const commissionRate = report.commissionRate !== undefined ? report.commissionRate : 0.10; 
                 const overtimeRate = report.overtimeRate !== undefined ? report.overtimeRate : 0.30;   
 
                 let revenuePerThisEmployeeActual = 0;
                 if (report.status === 'approved') {
+                    // ĐÃ SỬA: Khai báo personalShareAmount ở đây để nó có sẵn
+                    const personalShareAmount = reportPrice / numParticipants; 
+
                     if (report.isOvertime) {
-                        // Nếu là hóa đơn ngoài giờ, và nhân viên hiện tại là người tạo hoặc partner
-                        // Tính toán theo overtimeRate từ hóa đơn, hoặc 0.30 mặc định
                         if (report.userId === employeeId || report.partnerId === employeeId) {
                             revenuePerThisEmployeeActual = reportPrice * overtimeRate;
                         }
                     } else {
-                        // Nếu là hóa đơn thường, và nhân viên hiện tại là người tạo hoặc partner
-                        // Tính toán theo commissionRate từ hóa đơn, hoặc 0.10 mặc định
                         if (report.userId === employeeId || report.partnerId === employeeId) {
-                            const personalShare = reportPrice / numParticipants;
-                            revenuePerThisEmployeeActual = personalShare * commissionRate;
+                            revenuePerThisEmployeeActual = personalShareAmount * commissionRate; 
                         }
                     }
                     currentCalculatedActualRevenue += revenuePerThisEmployeeActual; 
@@ -244,7 +249,6 @@ const EmployeeStatisticsScreen = () => {
                     }
                 }
 
-                // Cập nhật xếp hạng nhân viên (employeeRevenueMap)
                 if (report.participantIds) {
                     report.participantIds.forEach(participantId => {
                         const employeeStats = employeeRevenueMap.get(participantId);
@@ -258,7 +262,6 @@ const EmployeeStatisticsScreen = () => {
                             } else {
                                 employeeStats.personal += pricePerParticipant;
                             }
-                            // Tính hoa hồng cho từng nhân viên trong hóa đơn đó
                             employeeStats.commission += pricePerParticipant * (report.isOvertime ? overtimeRate : commissionRate); 
                             employeeRevenueMap.set(participantId, employeeStats);
                         }
@@ -276,7 +279,6 @@ const EmployeeStatisticsScreen = () => {
                 labels: Object.keys(dailyRevenueForChart),
                 datasets: [{ data: Object.values(dailyRevenueForChart) }],
             });
-            // Đảm bảo personalChartData cũng được set
             setPersonalChartData({
                 labels: Object.keys(dailyRevenueForChart),
                 datasets: [{ data: Object.values(dailyRevenueForChart) }]
@@ -291,7 +293,6 @@ const EmployeeStatisticsScreen = () => {
                 legendFontSize: 15,
             })));
 
-            // Cập nhật xếp hạng nhân viên
             const sortedEmployeeRankings = Array.from(employeeRevenueMap.values())
                 .sort((a, b) => b.commission - a.commission); 
             setEmployeeRankings(sortedEmployeeRankings);
@@ -344,16 +345,17 @@ const EmployeeStatisticsScreen = () => {
              const reportPrice = item.price || 0;
              let actualPerReport = 0;
 
-             // Lấy tỷ lệ hoa hồng từ hóa đơn, hoặc dùng mặc định nếu không có (cho hóa đơn cũ)
              const commissionRate = item.commissionRate !== undefined ? item.commissionRate : 0.10; 
              const overtimeRate = item.overtimeRate !== undefined ? item.overtimeRate : 0.30;   
 
              if (item.userId === employeeId || item.partnerId === employeeId) {
+                // ĐÃ SỬA: Khai báo personalShareAmount ở đây để nó có sẵn
+                const personalShareAmount = reportPrice / numParticipants; 
+
                 if (item.isOvertime) {
                     actualPerReport = reportPrice * overtimeRate;
                 } else {
-                    const personalShare = reportPrice / numParticipants;
-                    actualPerReport = personalShare * commissionRate;
+                    actualPerReport = personalShareAmount * commissionRate; // Sử dụng biến đã khai báo
                 }
              }
 
@@ -368,7 +370,6 @@ const EmployeeStatisticsScreen = () => {
             year: 'numeric'
         }) : 'Không rõ';
 
-        // Lấy tỷ lệ ngoài giờ để hiển thị trên UI item
         const displayOvertimeRate = item.overtimeRate !== undefined ? (item.overtimeRate * 100).toFixed(0) : '30'; 
 
         return (
@@ -474,17 +475,12 @@ const EmployeeStatisticsScreen = () => {
                     </TouchableOpacity>
                 </View>
                 <TimeFilterSegment activeFilter={selectedPeriod} onFilterChange={setSelectedPeriod} style={styles.timeFilterSegmentMargin} />
-                {loading ? (
-                    <View style={styles.lottieContainer}>
-                        {/* <LottieView
-                            source={require('../../assets/loading.json')}
-                            autoPlay
-                            loop
-                            style={styles.lottieSpinner}
-                        /> */}
-                        <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
-                    </View>
-                ) : (
+                
+                {/* Sử dụng LoadingOverlay */}
+                <LoadingOverlay isVisible={loading} message="Đang tải dữ liệu..." />
+
+                {/* Chỉ hiển thị nội dung khi không loading */}
+                {!loading && (
                     <>
                         <View style={styles.summaryCardWrapper}>
                             <SummaryCard
@@ -556,17 +552,17 @@ const EmployeeStatisticsScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.lightGray },
-    loadingContainer: {
+    loadingContainer: { // Sẽ được quản lý bởi LoadingOverlay
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: COLORS.lightGray,
     },
-    lottie: {
+    lottie: { // Sẽ được quản lý bởi LoadingOverlay (hoặc xóa nếu không dùng lottie)
         width: 150,
         height: 150,
     },
-    loadingText: {
+    loadingText: { // Sẽ được quản lý bởi LoadingOverlay
         marginTop: 10,
         fontSize: 16,
         color: COLORS.gray,
@@ -582,7 +578,6 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.white,
         borderRadius: 12,
         padding: 16,
-        // marginBottom: 16, // Giữ lại nếu muốn card có margin bottom riêng
         marginHorizontal: 15,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },

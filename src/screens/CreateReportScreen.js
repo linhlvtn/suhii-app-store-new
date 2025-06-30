@@ -1,34 +1,31 @@
 // src/screens/CreateReportScreen.js
 
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, ActivityIndicator, Platform, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, Platform, TouchableWithoutFeedback } from 'react-native'; // Xóa ActivityIndicator
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
-import { db, auth } from '../../firebaseConfig'; // Đảm bảo db và auth được import từ firebaseConfig
+import { db, auth } from '../../firebaseConfig'; 
 import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { useNavigation } from '@react-navigation/native';
-import { useAuth } from '../../src/context/AuthContext'; // Để lấy user info và userRole
+import { useAuth } from '../../src/context/AuthContext'; 
 
-import { useCommissionRates } from '../hooks/useCommissionRates'; // <-- THÊM DÒNG NÀY ĐỂ IMPORT HOOK MỚI
+import { useCommissionRates } from '../hooks/useCommissionRates'; 
+import LoadingOverlay from '../components/LoadingOverlay'; // <-- THÊM DÒNG NÀY ĐỂ IMPORT COMPONENT MỚI
 
-// --- Hằng số màu sắc ---
-// Sử dụng COLORS bạn đã định nghĩa hoặc từ theme.js nếu có
-// Nếu bạn có file theme.js với COLORS, hãy import nó vào đây.
-// Ví dụ: import { COLORS } from '../../constants/theme';
 const COLORS = {
     black: '#121212',
     white: '#FFFFFF',
     gray: '#888888',
     lightGray: '#F5F5F5',
-    primary: '#121212', // Sử dụng màu đen làm primary theo giao diện mới của bạn
+    primary: '#121212', 
     pending: '#f39c12',
     approved: '#28a745',
     rejected: '#D32F2F',
-    overtime: '#6a0dad', // Thêm màu cho trạng thái làm ngoài giờ
+    overtime: '#6a0dad', 
 };
 
 // --- CÁC COMPONENT CON (Checkbox, RadioButton) ---
@@ -71,7 +68,7 @@ const PAYMENT_OPTIONS = [
 const CreateReportScreen = () => {
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
-    const { user, userRole } = useAuth(); // Lấy thông tin user và userRole từ AuthContext
+    const { user, userRole } = useAuth(); 
 
     const [price, setPrice] = useState('');
     const [rawPrice, setRawPrice] = useState('');
@@ -87,8 +84,7 @@ const CreateReportScreen = () => {
 
     const [isOvertime, setIsOvertime] = useState(false);
 
-    // MỚI: Sử dụng hook để lấy tỷ lệ hoa hồng từ Firebase
-    const { defaultRevenuePercentage, overtimePercentage, isLoading: ratesLoading } = useCommissionRates(); //
+    const { defaultRevenuePercentage, overtimePercentage, isLoading: ratesLoading } = useCommissionRates(); 
 
     useEffect(() => {
         const fetchAllUsers = async () => {
@@ -101,14 +97,14 @@ const CreateReportScreen = () => {
 
                 const userList = [];
                 querySnapshot.forEach((doc) => {
-                    if (doc.id !== currentUser.uid) { // Loại trừ chính mình
+                    if (doc.id !== currentUser.uid) { 
                         userList.push({ id: doc.id, ...doc.data() });
                     }
                 });
                 setEmployees(userList);
             } catch (error) {
-                console.error("Lỗi khi tải danh sách người dùng:", error); //
-                Alert.alert("Lỗi", "Không thể tải danh sách người dùng."); //
+                console.error("Lỗi khi tải danh sách người dùng:", error); 
+                Alert.alert("Lỗi", "Không thể tải danh sách người dùng."); 
             }
         };
         fetchAllUsers();
@@ -118,8 +114,8 @@ const CreateReportScreen = () => {
     const handleServiceSelection = (value) => { setSelectedServices((prev) => prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]); };
     const formatCurrency = (num) => { if (!num) return ''; let cleanNum = num.toString().replace(/[^0-9]/g, ''); return cleanNum.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
     const handlePriceChange = (text) => { const numericValue = text.replace(/[^0-9]/g, ''); setRawPrice(numericValue); setPrice(formatCurrency(numericValue)); };
-    const handleImagePick = () => { Alert.alert("Thêm hình ảnh", "Chọn nguồn ảnh", [{ text: "Thư viện", onPress: pickImage }, { text: "Camera", onPress: takePhoto }, { text: "Hủy", style: "cancel" }]); }; //
-    const pickImage = async () => { //
+    const handleImagePick = () => { Alert.alert("Thêm hình ảnh", "Chọn nguồn ảnh", [{ text: "Thư viện", onPress: pickImage }, { text: "Camera", onPress: takePhoto }, { text: "Hủy", style: "cancel" }]); }; 
+    const pickImage = async () => { 
         const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (permissionResult.granted === false) {
             Alert.alert("Quyền truy cập bị từ chối", "Cần quyền truy cập vào thư viện ảnh để chọn ảnh.");
@@ -133,7 +129,7 @@ const CreateReportScreen = () => {
         });
         if (!result.canceled) { setImageUri(result.assets[0].uri); }
     };
-    const takePhoto = async () => { //
+    const takePhoto = async () => { 
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') { Alert.alert('Quyền truy cập Camera bị từ chối'); return; }
         let result = await ImagePicker.launchCameraAsync({
@@ -144,7 +140,7 @@ const CreateReportScreen = () => {
         });
         if (!result.canceled) { setImageUri(result.assets[0].uri); }
     };
-    const uploadImageToCloudinary = async (uri) => { //
+    const uploadImageToCloudinary = async (uri) => { 
         const formData = new FormData();
         formData.append('file', { uri: uri, type: 'image/jpeg', name: 'report_image.jpg' });
         formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
@@ -154,8 +150,8 @@ const CreateReportScreen = () => {
             });
             return res.data.secure_url;
         } catch (error) {
-            console.error('Lỗi tải ảnh:', error); //
-            Alert.alert('Lỗi tải ảnh', 'Không thể tải ảnh lên. Vui lòng thử lại.'); //
+            console.error('Lỗi tải ảnh:', error); 
+            Alert.alert('Lỗi tải ảnh', 'Không thể tải ảnh lên. Vui lòng thử lại.'); 
             return null;
         }
     };
@@ -170,7 +166,7 @@ const CreateReportScreen = () => {
             Alert.alert('Lỗi', 'Giá tiền không hợp lệ.');
             return;
         }
-        if (ratesLoading) { // MỚI: Chờ dữ liệu tỷ lệ tải xong
+        if (ratesLoading) { 
             Alert.alert('Thông báo', 'Đang tải cài đặt tỷ lệ doanh thu, vui lòng thử lại sau.');
             return;
         }
@@ -181,7 +177,7 @@ const CreateReportScreen = () => {
             imageUrl = await uploadImageToCloudinary(imageUri);
             if (!imageUrl) {
                 setUploading(false);
-                return; // Dừng nếu tải ảnh thất bại
+                return; 
             }
         }
 
@@ -189,7 +185,7 @@ const CreateReportScreen = () => {
             const currentUser = auth.currentUser;
             if (!currentUser) { throw new Error("Người dùng chưa đăng nhập."); }
 
-            const currentEmployeeName = currentUser.displayName || currentUser.email.split('@')[0]; //
+            const currentEmployeeName = currentUser.displayName || currentUser.email.split('@')[0]; 
 
             let partnerName = null;
             if (selectedPartner) {
@@ -204,10 +200,8 @@ const CreateReportScreen = () => {
                 participantIds.push(selectedPartner);
             }
 
-            // Xác định trạng thái hóa đơn dựa trên vai trò của người dùng
-            const reportStatus = userRole === 'admin' ? 'approved' : 'pending'; //
+            const reportStatus = userRole === 'admin' ? 'approved' : 'pending'; 
 
-            // MỚI: Lấy tỷ lệ hoa hồng hiện tại từ hook
             const currentRevenuePercentage = defaultRevenuePercentage;
             const currentOvertimePercentage = overtimePercentage;
 
@@ -226,15 +220,13 @@ const CreateReportScreen = () => {
                 partnerId: selectedPartner || null,
                 partnerName: partnerName,
                 participantIds: participantIds,
-                // MỚI: LƯU CÁC TỶ LỆ HOA HỒNG VÀO  MỚI
-                commissionRate: currentRevenuePercentage / 100, // Lưu dưới dạng thập phân (ví dụ: 0.10)
-                overtimeRate: currentOvertimePercentage / 100, // Lưu dưới dạng thập phân (ví dụ: 0.30)
+                commissionRate: currentRevenuePercentage / 100, 
+                overtimeRate: currentOvertimePercentage / 100, 
             };
 
             await addDoc(collection(db, 'reports'), reportData);
-            Alert.alert('Thành công', ` đã được tạo và ${userRole === 'admin' ? 'đã duyệt' : 'gửi đi chờ duyệt'}!`); //
+            Alert.alert('Thành công', ` đã được tạo và ${userRole === 'admin' ? 'đã duyệt' : 'gửi đi chờ duyệt'}!`); 
 
-            // Reset form
             setPrice('');
             setRawPrice('');
             setSelectedServices([]);
@@ -242,11 +234,11 @@ const CreateReportScreen = () => {
             setPaymentMethod(PAYMENT_OPTIONS[0].value);
             setImageUri(null);
             setSelectedPartner(null);
-            setIsOvertime(false); //
+            setIsOvertime(false); 
             navigation.goBack();
         } catch (error) {
-            console.error('Lỗi khi gửi hóa đơn:', error); //
-            Alert.alert('Lỗi', 'Có lỗi xảy ra khi tạo hóa đơn.'); //
+            console.error('Lỗi khi gửi hóa đơn:', error); 
+            Alert.alert('Lỗi', 'Có lỗi xảy ra khi tạo hóa đơn.'); 
         } finally {
             setUploading(false);
         }
@@ -256,16 +248,6 @@ const CreateReportScreen = () => {
     const confirmSelection = () => { setSelectedPartner(tempPartner); setPickerModalVisible(false); };
 
     const partnerName = selectedPartner ? (employees.find(e => e.id === selectedPartner)?.displayName || 'Không rõ') : '-- Không chọn --';
-
-    // MỚI: Hiển thị loading indicator nếu ratesLoading là true
-    if (ratesLoading) {
-        return (
-            <View style={styles.loadingOverlay}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-                <Text style={styles.loadingText}>Đang tải cài đặt doanh thu...</Text>
-            </View>
-        );
-    }
 
     return (
         <View style={styles.fullScreenContainer}>
@@ -278,12 +260,11 @@ const CreateReportScreen = () => {
                 <View style={styles.headerRightPlaceholder} />
             </View>
 
-            <Modal transparent={true} animationType="fade" visible={uploading}>
-                <View style={styles.modalBackground}>
-                    <ActivityIndicator size="large" color="#ffffff" />
-                    <Text style={styles.loadingText}>Đang xử lý...</Text>
-                </View>
-            </Modal>
+            {/* Sử dụng LoadingOverlay cho cả ratesLoading và uploading */}
+            <LoadingOverlay 
+                isVisible={ratesLoading || uploading} 
+                message={ratesLoading ? "Đang tải cài đặt doanh thu..." : "Đang xử lý..."} 
+            />
 
             {/* Modal cho Picker Người làm cùng */}
             <Modal transparent={true} visible={isPickerModalVisible} animationType="slide" onRequestClose={() => setPickerModalVisible(false)}>
@@ -421,9 +402,9 @@ const styles = StyleSheet.create({
         borderBottomColor: '#e0e0e0',
     },
     backButton: { padding: 5, marginRight: 10 },
-    submitButtonText: { color: COLORS.white, fontSize: 18, fontWeight: 600},
+    submitButtonText: { color: COLORS.white, fontSize: 18, fontWeight: '600'},
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.black },
-    headerRightPlaceholder: { width: 48 }, // Để căn giữa tiêu đề
+    headerRightPlaceholder: { width: 48 }, 
     scrollView: { flex: 1 },
     contentContainer: { padding: 15, paddingBottom: 100 },
     card: {
@@ -464,18 +445,18 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         alignItems: 'center'
     },
-    submitButtonDisabled: { backgroundColor: COLORS.gray }, // Sử dụng màu xám khi disabled
+    submitButtonDisabled: { backgroundColor: COLORS.gray }, 
     buttonText: { color: COLORS.white, fontSize: 18, fontWeight: 'bold' },
-    modalBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.6)' },
-    loadingText: { color: COLORS.white, marginTop: 15, fontSize: 16 },
+    // modalBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.6)' }, // Sẽ được quản lý bởi LoadingOverlay
+    // loadingText: { color: COLORS.white, marginTop: 15, fontSize: 16 }, // Sẽ được quản lý bởi LoadingOverlay
 
     checkboxGroup: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    checkboxContainer: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, width: '48%' }, // Thêm width để căn 2 cột
+    checkboxContainer: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, width: '48%' }, 
     checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     checkboxSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
     checkboxLabel: { fontSize: 16, color: '#333' },
 
-    radioGroup: { flexDirection: 'column' }, // Đổi thành column để mỗi radio là 1 hàng
+    radioGroup: { flexDirection: 'column' }, 
     radioButtonContainer: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
     radioCircle: { height: 22, width: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     selectedRb: { width: 14, height: 14, borderRadius: 7, backgroundColor: COLORS.primary },
@@ -485,7 +466,7 @@ const styles = StyleSheet.create({
         height: 150,
         borderRadius: 10,
         borderWidth: 2,
-        borderColor: COLORS.primary, // Sửa màu border
+        borderColor: COLORS.primary, 
         borderStyle: 'dashed',
         justifyContent: 'center',
         alignItems: 'center',
@@ -507,13 +488,13 @@ const styles = StyleSheet.create({
     modalDoneButtonText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
     pickerItemText: { color: COLORS.black, fontSize: 18 },
 
-    // MỚI: Styles cho loading overlay khi ratesLoading
-    loadingOverlay: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: COLORS.lightGray, // Hoặc màu nền phù hợp với ứng dụng của bạn
-    },
+    // Xóa styles liên quan đến loading cũ
+    // loadingOverlay: {
+    //     flex: 1,
+    //     justifyContent: 'center',
+    //     alignItems: 'center',
+    //     backgroundColor: COLORS.lightGray, 
+    // },
 });
 
 export default CreateReportScreen;

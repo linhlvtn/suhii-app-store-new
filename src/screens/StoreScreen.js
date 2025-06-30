@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, RefreshControl, Image, TouchableOpacity, Alert, Modal, Platform, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, StyleSheet, RefreshControl, Image, TouchableOpacity, Alert, Modal, Platform, TouchableWithoutFeedback } from 'react-native'; // Xóa ActivityIndicator
 import { collection, getDocs, query, orderBy, where, doc, updateDoc, deleteDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -8,6 +8,8 @@ import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-m
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useAuth } from '../context/AuthContext';
 import { SwipeListView, SwipeRow } from 'react-native-swipe-list-view';
+
+import LoadingOverlay from '../components/LoadingOverlay'; // <-- Đảm bảo import LoadingOverlay
 
 LocaleConfig.locales['vi'] = { 
     monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], 
@@ -23,7 +25,7 @@ const COLORS = {
     white: '#FFFFFF', 
     gray: '#888888', 
     lightGray: '#F5F5F5', 
-    primary: '#007bff', // Màu xanh chủ đạo, có thể thay đổi thành #121212 nếu muốn đồng bộ theme Admin Panel
+    primary: '#007bff', 
     pending: '#f39c12', 
     approved: '#28a745', 
     rejected: '#D32F2F', 
@@ -37,7 +39,6 @@ const getFormattedDate = (date) => {
     const yesterday = new Date(today); 
     yesterday.setDate(yesterday.getDate() - 1); 
     
-    // So sánh ngày (không bao gồm giờ)
     const dateToCompare = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
     if (dateToCompare.getTime() === today.getTime()) return 'Hôm nay'; 
@@ -100,7 +101,11 @@ const StoreScreen = () => {
     const navigation = useNavigation();
 
     const fetchReports = useCallback(async () => {
-        if (!userRole) return; 
+        // Đảm bảo luôn trả về một hàm, kể cả khi userRole chưa có
+        if (!userRole) { 
+            setLoading(false); // Tắt loading nếu không có userRole để tránh bị kẹt
+            return () => {}; // Trả về hàm rỗng để không gây lỗi undefined
+        } 
         setLoading(true); 
         try { 
             const reportsRef = collection(db, 'reports'); 
@@ -118,9 +123,9 @@ const StoreScreen = () => {
                 queries.push(where('createdAt', '>=', startOfDay), where('createdAt', '<=', endOfDay)); 
             } 
             const q = query(reportsRef, ...queries); 
-            const unsubscribe = onSnapshot(q, (querySnapshot) => { // Dùng onSnapshot để cập nhật real-time
+            const unsubscribe = onSnapshot(q, (querySnapshot) => { 
                 setRawReports(querySnapshot.docs.map(d => ({ key: d.id, ...d.data() })));
-                setLoading(false); // Dừng loading ở đây
+                setLoading(false); 
             }, (error) => {
                 console.error("Lỗi khi lắng nghe hóa đơn:", error); 
                 if (error.code === 'failed-precondition') { 
@@ -128,11 +133,11 @@ const StoreScreen = () => {
                 } 
                 setLoading(false);
             });
-            return unsubscribe; // Trả về trực tiếp hàm unsubscribe
+            return unsubscribe; 
         } catch (error) { 
             console.error("Lỗi khi tải hóa đơn:", error); 
-            setLoading(false); // Đảm bảo loading được tắt nếu có lỗi ban đầu
-            return () => {}; // Trả về một hàm rỗng để tránh lỗi nếu không có unsubscribe thật
+            setLoading(false); 
+            return () => {}; 
         } 
     }, [user, userRole, statusFilter, selectedDate]);
     
@@ -146,24 +151,27 @@ const StoreScreen = () => {
     }, [userRole]);
 
     useFocusEffect(useCallback(() => { 
-        let unsubscribeFunc; // Đổi tên biến để tránh nhầm lẫn
+        let unsubscribeFunc; 
         const setupListener = async () => {
             if (userRole) {
                 // Đảm bảo await fetchReports() để nhận hàm unsubscribe thực sự
+                // hoặc hàm rỗng từ fetchReports
                 unsubscribeFunc = await fetchReports(); 
+            } else {
+                // Nếu không có userRole, đảm bảo unsubscribeFunc là một hàm rỗng
+                unsubscribeFunc = () => {};
             }
         };
         setupListener();
 
         return () => {
-            // Chỉ gọi hàm unsubscribe nếu nó tồn tại và là một hàm
             if (typeof unsubscribeFunc === 'function') {
                 unsubscribeFunc(); 
             } else {
                 console.warn("unsubscribeFunc không phải là một hàm hoặc chưa được gán:", unsubscribeFunc);
             }
         };
-    }, [userRole, fetchReports])); // Dependencies vẫn như cũ
+    }, [userRole, fetchReports])); 
 
     useEffect(() => { 
         const grouped = rawReports.reduce((acc, report) => { 
@@ -196,7 +204,6 @@ const StoreScreen = () => {
                     onPress: async () => { 
                         try { 
                             await updateDoc(doc(db, 'reports', reportId), { status: newStatus }); 
-                            // onSnapshot sẽ tự động cập nhật UI, không cần fetchReports lại
                         } catch (error) { 
                             Alert.alert("Lỗi", "Không thể cập nhật."); 
                         } 
@@ -256,7 +263,6 @@ const StoreScreen = () => {
                     onPress: async () => { 
                         try { 
                             await deleteDoc(doc(db, 'reports', reportId)); 
-                            // onSnapshot sẽ tự động cập nhật UI, không cần fetchReports lại
                         } catch (error) { 
                             Alert.alert("Lỗi", "Không thể xóa hóa đơn."); 
                         } 
@@ -295,39 +301,31 @@ const StoreScreen = () => {
         };
         const statusInfo = statusMap[item.status] || { icon: 'help-circle', color: COLORS.gray };
         
-        // Logic cho phép chỉnh sửa: Admin chỉ sửa hóa đơn pending. Nhân viên chỉ sửa hóa đơn của mình và pending.
         const canEdit = userRole === 'admin' ? item.status === 'pending' : (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
-        // Logic cho phép xóa: Admin có thể xóa bất kỳ hóa đơn nào. Nhân viên chỉ xóa hóa đơn của mình và pending.
         const canDelete = userRole === 'admin' || (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
         
-        // MỚI: Tính toán số người tham gia (người tạo + người làm cùng nếu có)
         const numberOfParticipants = (item.participantIds && Array.isArray(item.participantIds) && item.participantIds.length > 0) ? item.participantIds.length : 1;
         
-        // MỚI: Tính toán doanh thu được chia (từ giá gốc)
         const originalPrice = item.price || 0;
         const sharedPrice = numberOfParticipants > 0 ? originalPrice / numberOfParticipants : originalPrice;
 
-        // MỚI: Lấy tỷ lệ hoa hồng từ hóa đơn, hoặc dùng mặc định nếu không có (cho hóa đơn cũ)
         const commissionRate = item.commissionRate !== undefined ? item.commissionRate : 0.10; 
         const overtimeRate = item.overtimeRate !== undefined ? item.overtimeRate : 0.30;   
 
-        // MỚI: Tính toán doanh thu thực nhận của người dùng hiện tại từ hóa đơn này
         let actualReceivedRevenueText = null;
-        if (item.status === 'approved' && user?.uid) { // Chỉ tính nếu hóa đơn được duyệt và có user đăng nhập
+        if (item.status === 'approved' && user?.uid) { 
             let actualPerReport = 0;
-            // Nếu hóa đơn này có người dùng hiện tại là người tạo hoặc partner
             if (item.userId === user.uid || item.partnerId === user.uid) {
                 if (item.isOvertime) {
                     actualPerReport = sharedPrice * overtimeRate; 
                 } else {
                     actualPerReport = sharedPrice * commissionRate; 
                 }
-            } else if (userRole === 'admin') { // Nếu là admin, hiển thị hoa hồng của người tạo chính
-                // Đây là trường hợp admin xem hóa đơn không phải của mình, và muốn xem hoa hồng của người tạo hóa đơn
+            } else if (userRole === 'admin') { 
                 if (item.isOvertime) {
-                    actualPerReport = originalPrice * overtimeRate; // Hoa hồng tính trên giá gốc cho người tạo
+                    actualPerReport = originalPrice * overtimeRate; 
                 } else {
-                    actualPerReport = originalPrice * commissionRate; // Hoa hồng tính trên giá gốc cho người tạo
+                    actualPerReport = originalPrice * commissionRate; 
                 }
             }
 
@@ -336,7 +334,6 @@ const StoreScreen = () => {
             }
         }
 
-        // MỚI: Lấy tỷ lệ ngoài giờ để hiển thị
         const displayOvertimeRate = item.overtimeRate !== undefined ? (item.overtimeRate * 100).toFixed(0) : '30'; 
 
         return (
@@ -383,7 +380,6 @@ const StoreScreen = () => {
                                 <Text style={styles.serviceText} numberOfLines={2}>
                                     {item.service || ''}
                                 </Text>
-                                {/* Logic hiển thị Menu cho Employee */}
                                 {userRole === 'employee' && (canEdit || canDelete) && ( 
                                     <Menu>
                                         <MenuTrigger style={styles.menuTrigger}>
@@ -406,19 +402,18 @@ const StoreScreen = () => {
                                         </MenuOptions>
                                     </Menu>
                                 )}
-                                {/* Logic hiển thị Menu cho Admin (Chỉ Edit/Delete) */}
                                 {userRole === 'admin' && (canEdit || canDelete) && (
                                     <Menu>
                                         <MenuTrigger style={styles.menuTrigger}>
                                             <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
                                         </MenuTrigger>
                                         <MenuOptions customStyles={menuOptionsStyles}>
-                                            {canEdit && ( // Admin chỉ có thể edit pending reports
+                                            {canEdit && ( 
                                                 <MenuOption onSelect={() => handleEdit(item)}>
                                                     <Text>Chỉnh sửa</Text>
                                                 </MenuOption>
                                             )}
-                                            {canDelete && ( // Admin có thể xóa bất kỳ report nào
+                                            {canDelete && ( 
                                                 <MenuOption onSelect={() => handleDelete(item.key)}>
                                                     <Text style={{ color: 'red' }}>Xóa</Text>
                                                 </MenuOption>
@@ -436,7 +431,6 @@ const StoreScreen = () => {
                                 )}
                             </View>
                             
-                            {/* MỚI: Hiển thị doanh thu thực nhận */}
                             {actualReceivedRevenueText && item.status === 'approved' ? (
                                 <View style={styles.infoRow}>
                                     <Ionicons name="cash" size={16} color={COLORS.approved} />
@@ -484,7 +478,6 @@ const StoreScreen = () => {
     };
 
     const renderSectionHeader = ({ section }) => {
-        // Tổng doanh thu của section nên là tổng giá tiền gốc (price) của các hóa đơn đã duyệt
         const totalSectionRevenue = section.data.reduce((sum, item) => {
             if (item.status === 'approved') {
                 return sum + (item.price || 0); 
@@ -502,14 +495,8 @@ const StoreScreen = () => {
         );
     };
 
-    if (initializing) {
-        return (
-            <View style={styles.fullScreenLoader}>
-                <ActivityIndicator size="large" color={COLORS.black} />
-            </View>
-        );
-    }
-
+    // Loại bỏ khối if (initializing) và ActivityIndicator trực tiếp ở đây
+    // LoadingOverlay sẽ xử lý việc này
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -607,9 +594,11 @@ const StoreScreen = () => {
                 </TouchableWithoutFeedback>
             </Modal>
             
-            {loading ? (
-                <ActivityIndicator size="large" style={{ flex: 1, color: COLORS.black }} />
-            ) : (
+            {/* Sử dụng LoadingOverlay cho cả initializing và loading */}
+            <LoadingOverlay isVisible={initializing || loading} message={initializing ? "Đang khởi tạo ứng dụng..." : "Đang tải hóa đơn..."} />
+
+            {/* Chỉ hiển thị SwipeListView khi không loading và không initializing */}
+            {!initializing && !loading && (
                 <SwipeListView
                     useSectionList
                     sections={sections}
@@ -659,7 +648,7 @@ const StoreScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f9f9f9' },
-    fullScreenLoader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    // fullScreenLoader: { flex: 1, justifyContent: 'center', alignItems: 'center' }, // Đã xóa/comment do sử dụng LoadingOverlay
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: Platform.OS === 'android' ? 40 : 50, paddingBottom: 10, paddingHorizontal: 15, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: '#eee' },
     headerLogo: { width: 100, height: 40 },
     headerRightContainer: { flexDirection: 'row', alignItems: 'center', width: 100, justifyContent: 'flex-end' },
@@ -688,15 +677,15 @@ const styles = StyleSheet.create({
     serviceText: { fontSize: 16, fontWeight: 'bold', color: COLORS.black, flex: 1, marginRight: 5 },
     priceContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, },
     priceText: { fontSize: 16, fontWeight: '600', color: COLORS.rejected },
-    sharedPriceText: { // Sửa đổi style này cho số tiền đã chia
-        fontSize: 16, // Kích thước to hơn
-        fontWeight: 'bold', // Đậm hơn
-        color: COLORS.rejected, // Màu đỏ
+    sharedPriceText: { 
+        fontSize: 16, 
+        fontWeight: 'bold', 
+        color: COLORS.rejected, 
     },
-    originalPriceNote: { // Style cho số tiền gốc
-        fontSize: 12, // Nhỏ hơn
-        color: COLORS.secondary, // Màu nhạt hơn
-        marginTop: 2, // Cách dòng trên một chút
+    originalPriceNote: { 
+        fontSize: 12, 
+        color: COLORS.secondary, 
+        marginTop: 2, 
     },
     overtimeText: { marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: COLORS.primary },
     infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
