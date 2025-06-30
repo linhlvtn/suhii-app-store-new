@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native'; // Import useNavigation
 import { Picker } from '@react-native-picker/picker';
-import LottieView from 'lottie-react-native';
+// import LottieView from 'lottie-react-native';
 
 // --- Hằng số màu sắc ---
 // Import từ theme.js nếu có
@@ -319,12 +319,12 @@ const EditReportScreen = () => {
     // hoặc if (uploading) { // Trong CreateReportScreen (nếu bạn chỉ muốn lottie cho uploading)
         return (
             <View style={styles.loadingOverlayContainer}> {/* Style mới */}
-                <LottieView
+                {/* <LottieView
                     source={require('../../assets/loading.json')} // Thay đổi đường dẫn
                     autoPlay
                     loop
                     style={styles.loadingOverlayLottie}
-                />
+                /> */}
                 <Text style={styles.loadingOverlayText}>Đang tải dữ liệu...</Text> {/* Hoặc "Đang xử lý..." */}
             </View>
         );

@@ -4,7 +4,6 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { ActivityIndicator, View, StatusBar, StyleSheet, Text } from 'react-native';
 import { MenuProvider } from 'react-native-popup-menu';
-import LottieView from 'lottie-react-native';
 
 // --- IMPORT CONTEXT ---
 import { AuthProvider, useAuth } from './src/context/AuthContext'; 
@@ -20,12 +19,12 @@ const AppNavigator = () => {
   if (initializing) {
     return (
       <View style={styles.lottieLoadingContainer}>
-        <LottieView
+        {/* <LottieView
           source={require('./assets/loading.json')}
           autoPlay
           loop
           style={styles.lottieAnimation}
-        />
+        /> */}
         <Text style={styles.loadingText}>Đang tải...</Text>
       </View>
     );

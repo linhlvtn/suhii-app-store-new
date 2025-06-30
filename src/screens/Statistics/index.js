@@ -14,7 +14,6 @@ import SummaryCard from './components/SummaryCard';
 import StatsChart from './components/StatsChart';
 import RankItem from './components/RankItem';
 import ServicePieChart from './components/ServicePieChart';
-import LottieView from 'lottie-react-native';
 
 LocaleConfig.locales['vi'] = {
   monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
@@ -402,12 +401,12 @@ const AdminStatisticsDashboard = () => {
                 <TimeFilterSegment activeFilter={activeFilter} onFilterChange={handleFilterChange} />
                 {loading ? (
                     <View style={styles.lottieContainer}>
-                        <LottieView
+                        {/* <LottieView
                             source={require('../../../assets/loading.json')}
                             autoPlay
                             loop
                             style={styles.lottieSpinner}
-                        />
+                        /> */}
                         <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
                     </View>
                 ) : (

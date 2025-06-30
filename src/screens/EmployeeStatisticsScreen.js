@@ -7,7 +7,7 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
-import LottieView from 'lottie-react-native';
+// import LottieView from 'lottie-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import moment from 'moment';
@@ -476,12 +476,12 @@ const EmployeeStatisticsScreen = () => {
                 <TimeFilterSegment activeFilter={selectedPeriod} onFilterChange={setSelectedPeriod} style={styles.timeFilterSegmentMargin} />
                 {loading ? (
                     <View style={styles.lottieContainer}>
-                        <LottieView
+                        {/* <LottieView
                             source={require('../../assets/loading.json')}
                             autoPlay
                             loop
                             style={styles.lottieSpinner}
-                        />
+                        /> */}
                         <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
                     </View>
                 ) : (
