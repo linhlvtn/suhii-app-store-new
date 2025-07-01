@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
         marginLeft: 5,
     },
     cardValueNew: {
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: 'bold',
         color: COLORS.primary,
         marginBottom: 8,

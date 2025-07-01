@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, RefreshControl, Image, TouchableOpacity, Alert, Modal, Platform, TouchableWithoutFeedback } from 'react-native'; // Xóa ActivityIndicator
+import { View, Text, StyleSheet, RefreshControl, Image, TouchableOpacity, Alert, Modal, Platform, TouchableWithoutFeedback, ActivityIndicator } from 'react-native'; 
 import { collection, getDocs, query, orderBy, where, doc, updateDoc, deleteDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -9,7 +9,7 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useAuth } from '../context/AuthContext';
 import { SwipeListView, SwipeRow } from 'react-native-swipe-list-view';
 
-import LoadingOverlay from '../components/LoadingOverlay'; // <-- Đảm bảo import LoadingOverlay
+// Đã loại bỏ import LoadingOverlay
 
 LocaleConfig.locales['vi'] = { 
     monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], 
@@ -595,16 +595,20 @@ const StoreScreen = () => {
             </Modal>
             
             {/* Sử dụng LoadingOverlay cho cả initializing và loading */}
-            <LoadingOverlay isVisible={initializing || loading} message={initializing ? "Đang khởi tạo ứng dụng..." : "Đang tải hóa đơn..."} />
-
-            {/* Chỉ hiển thị SwipeListView khi không loading và không initializing */}
-            {!initializing && !loading && (
+            {initializing || loading ? (
+                <View style={styles.simpleLoadingContainer}>
+                    <ActivityIndicator size="large" color={COLORS.black} />
+                    <Text style={styles.simpleLoadingText}>
+                        {initializing ? "Đang khởi tạo ứng dụng..." : "Đang tải hóa đơn..."}
+                    </Text>
+                </View>
+            ) : (
                 <SwipeListView
                     useSectionList
                     sections={sections}
                     renderItem={renderItem}
                     renderSectionHeader={renderSectionHeader}
-                    keyExtractor={(item) => item.key}
+                    keyExtractor={item => item.key}
                     contentContainerStyle={styles.listContainer}
                     refreshControl={
                         <RefreshControl 
@@ -648,7 +652,7 @@ const StoreScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f9f9f9' },
-    // fullScreenLoader: { flex: 1, justifyContent: 'center', alignItems: 'center' }, // Đã xóa/comment do sử dụng LoadingOverlay
+    // fullScreenLoader: { flex: 1, justifyContent: 'center', alignItems: 'center' }, 
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: Platform.OS === 'android' ? 40 : 50, paddingBottom: 10, paddingHorizontal: 15, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: '#eee' },
     headerLogo: { width: 100, height: 40 },
     headerRightContainer: { flexDirection: 'row', alignItems: 'center', width: 100, justifyContent: 'flex-end' },
@@ -673,7 +677,7 @@ const styles = StyleSheet.create({
     itemContainer: { flexDirection: 'row', backgroundColor: COLORS.white, paddingVertical: 12, paddingLeft: 12, paddingRight: 5, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
     itemImage: { width: 90, height: 90, borderRadius: 10, backgroundColor: COLORS.lightGray },
     itemContent: { flex: 1, marginLeft: 12, justifyContent: 'center' },
-    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5, },
+    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, },
     serviceText: { fontSize: 16, fontWeight: 'bold', color: COLORS.black, flex: 1, marginRight: 5 },
     priceContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, },
     priceText: { fontSize: 16, fontWeight: '600', color: COLORS.rejected },
@@ -711,6 +715,18 @@ const styles = StyleSheet.create({
     bulkRejectButton: { backgroundColor: COLORS.rejected },
     bulkApproveButton: { backgroundColor: COLORS.approved },
     bulkActionButtonText: { color: COLORS.white, fontWeight: 'bold', marginLeft: 8, fontSize: 14, },
+    simpleLoadingContainer: { // Style mới cho loading đơn giản
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 50, // Hoặc giá trị phù hợp
+        // Không có background overlay vì ActivityIndicator không full màn hình
+    },
+    simpleLoadingText: { // Style cho text loading
+        marginTop: 10,
+        fontSize: 16,
+        color: COLORS.black, // Hoặc màu phù hợp
+    },
 });
 const menuOptionsStyles = { optionsContainer: { borderRadius: 10, padding: 5, marginTop: 25 } };
 

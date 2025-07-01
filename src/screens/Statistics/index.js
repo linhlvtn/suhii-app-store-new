@@ -8,12 +8,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { db, auth } from '../../../firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
+import moment from 'moment'; // Import moment
+import 'moment/locale/vi'; // Import tiếng Việt
+moment.locale('vi');
 
 import TimeFilterSegment from './components/TimeFilterSegment';
 import SummaryCard from './components/SummaryCard';
 import StatsChart from './components/StatsChart';
 import RankItem from './components/RankItem';
 import ServicePieChart from './components/ServicePieChart';
+import LoadingOverlay from '../../components/LoadingOverlay'; // Ensure LoadingOverlay is imported
+import { Picker } from '@react-native-picker/picker'; // Import Picker
+import { Colors } from 'react-native/Libraries/NewAppScreen';
 
 LocaleConfig.locales['vi'] = {
   monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
@@ -33,52 +39,66 @@ const COLORS = {
     black: '#1a1a1a',
 };
 
-const getDateRange = (period, customDate = null) => {
-    const now = new Date();
-    let startDate = new Date(now), endDate = new Date(now);
+// Cập nhật hàm getDateRange để nhận baseDate và tính toán linh hoạt
+const getDateRange = (period, baseDate = null) => {
+    const date = baseDate ? new Date(baseDate) : new Date(); // Sử dụng baseDate nếu có, nếu không thì dùng ngày hiện tại
+    let startDate, endDate;
 
-    if (period === 'custom' && customDate) {
-        startDate = new Date(customDate);
-        endDate = new Date(customDate);
-    } else {
-        switch (period) {
-            case 'today': break;
-            case 'week':
-                const dayOfWeek = now.getDay();
-                const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-                startDate = new Date(now.setDate(diff));
-                break;
-            case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
-            case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
-            default: startDate = new Date(now);
-        }
+    switch (period) {
+        case 'today':
+        case 'custom':
+            startDate = new Date(date);
+            endDate = new Date(date);
+            break;
+        case 'week':
+            // Lấy ngày đầu tuần (Thứ Hai) của tuần chứa baseDate
+            const dayOfWeek = date.getDay(); // 0 for Sunday, 1 for Monday, ..., 6 for Saturday
+            const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Điều chỉnh để Thứ Hai là ngày đầu tuần
+            startDate = new Date(date.setDate(diff));
+            endDate = new Date(startDate);
+            endDate.setDate(startDate.getDate() + 6); // Kết thúc Chủ Nhật
+            break;
+        case 'month':
+            startDate = new Date(date.getFullYear(), date.getMonth(), 1);
+            endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0); // Ngày cuối cùng của tháng
+            break;
+        case 'year':
+            startDate = new Date(date.getFullYear(), 0, 1);
+            endDate = new Date(date.getFullYear(), 11, 31); // Ngày cuối cùng của năm
+            break;
+        default: // Mặc định là hôm nay
+            startDate = new Date(); // Dùng ngày hiện tại nếu không rõ period
+            endDate = new Date();
     }
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
     return { startDate: Timestamp.fromDate(startDate), endDate: Timestamp.fromDate(endDate) };
 };
 
+    // Cập nhật getDynamicTitle để hiển thị đúng theo period và customDate
     const getDynamicTitle = (period, date) => {
         const now = new Date();
-        if (period === 'custom' && date) {
-            return `Ngày ${date.toLocaleDateString('vi-VN')}`;
-        }
-        switch (period) {
-            case 'today':
-                return `Hôm nay, ${now.toLocaleDateString('vi-VN')}`;
-            case 'week': {
-                const startOfWeek = getDateRange('week').startDate.toDate();
-                const endOfWeek = new Date(startOfWeek);
-                endOfWeek.setDate(endOfWeek.getDate() + 6);
-                return `Tuần này (${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1} - ${endOfWeek.getDate()}/${endOfWeek.getMonth() + 1})`;
+        const titleText = (() => {
+            if (period === 'custom' && date) {
+                return `Ngày ${moment(date).format('DD/MM/YYYY')}`;
             }
-            case 'month':
-                return `Tháng ${now.getMonth() + 1}, ${now.getFullYear()}`;
-            case 'year':
-                return `Năm ${now.getFullYear()}`;
-            default:
-                return 'Tổng quan';
-        }
+            switch (period) {
+                case 'today':
+                    return `Hôm nay, ${moment(now).format('DD/MM/YYYY')}`;
+                case 'week': {
+                    const startOfWeek = getDateRange('week', date).startDate.toDate(); // Sử dụng 'date' làm baseDate
+                    const endOfWeek = getDateRange('week', date).endDate.toDate();     // Sử dụng 'date' làm baseDate
+                    return `Tuần (${moment(startOfWeek).format('DD/MM')} - ${moment(endOfWeek).format('DD/MM')})`;
+                }
+                case 'month':
+                    return `Tháng ${moment(date).format('MM, YYYY')}`; // Sử dụng 'date' để lấy tháng và năm
+                case 'year':
+                    return `Năm ${moment(date).format('YYYY')}`;       // Sử dụng 'date' để lấy năm
+                default:
+                    return 'Tổng quan';
+            }
+        })();
+        return titleText;
     };
 
 const AdminStatisticsDashboard = () => {
@@ -87,7 +107,7 @@ const AdminStatisticsDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [dynamicTitle, setDynamicTitle] = useState('');
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
-    const [customDate, setCustomDate] = useState(new Date());
+    const [customDate, setCustomDate] = useState(new Date()); // Sử dụng customDate làm baseDate cho việc lọc
 
     const [adminPersonalSummary, setAdminPersonalSummary] = useState({ totalRevenue: 0, totalReports: 0 });
     const [storeSummary, setStoreSummary] = useState({ totalRevenue: 0, revenueChange: 0, totalClients: 0, clientsChange: 0 });
@@ -172,14 +192,11 @@ const AdminStatisticsDashboard = () => {
         return data;
     }, [getFormattedDateKey]);
 
-    // Stable custom date string for dependency array
-    const customDateString = useMemo(() => customDate.toISOString(), [customDate]);
-
-    const fetchStatisticsData = useCallback(async () => {
+    // Hàm fetchStatisticsDataContent chỉ lấy và xử lý dữ liệu, không quản lý loading state
+    const fetchStatisticsDataContent = useCallback(async (period, date) => {
         if (!user?.uid) return;
 
-        setLoading(true);
-        const currentRange = getDateRange(activeFilter, customDate);
+        const currentRange = getDateRange(period, date);
         const diff = currentRange.endDate.toDate().getTime() - currentRange.startDate.toDate().getTime();
         const prevEndDate = new Date(currentRange.startDate.toDate().getTime() - 1);
         const prevStartDate = new Date(prevEndDate.getTime() - diff);
@@ -213,7 +230,7 @@ const AdminStatisticsDashboard = () => {
                         "Cơ sở dữ liệu của bạn thiếu chỉ mục cần thiết. Vui lòng kiểm tra console Firebase để tạo chỉ mục cho: reports collection, status, createdAt, participantIds."
                     );
                 }
-                return [];
+                throw e; // Re-throw to be caught by the caller
             }
         };
 
@@ -225,16 +242,80 @@ const AdminStatisticsDashboard = () => {
 
             const currentAdminReports = await getReportsInRange(currentRange, user.uid);
 
-            processData(currentStoreReports, previousStoreReports, currentRange.startDate.toDate(), currentRange.endDate.toDate(), activeFilter);
+            processData(currentStoreReports, previousStoreReports, currentRange.startDate.toDate(), currentRange.endDate.toDate(), period);
             processAdminPersonalData(currentAdminReports);
-            processAdminPersonalDataForChart(currentAdminReports, currentRange.startDate.toDate(), currentRange.endDate.toDate(), activeFilter);
-            setDynamicTitle(getDynamicTitle(activeFilter, customDate));
+            processAdminPersonalDataForChart(currentAdminReports, currentRange.startDate.toDate(), currentRange.endDate.toDate(), period);
+            setDynamicTitle(getDynamicTitle(period, date)); // Cập nhật dynamicTitle ở đây
         } catch (error) {
-            console.error("Lỗi fetchStatisticsData:", error);
+            console.error("Lỗi fetchStatisticsDataContent:", error);
+            throw error;
+        }
+    }, [user?.uid, initializeDailyData, processData, processAdminPersonalData, processAdminPersonalDataForChart]);
+
+    // Hàm loadStats để quản lý trạng thái loading
+    const loadStats = useCallback(async (period, date) => {
+        setLoading(true);
+        try {
+            await fetchStatisticsDataContent(period, date);
+        } catch (error) {
+            // Lỗi đã được xử lý trong fetchStatisticsDataContent
         } finally {
             setLoading(false);
         }
-    }, [activeFilter, customDateString, user?.uid, initializeDailyData]);
+    }, [fetchStatisticsDataContent]);
+
+
+    // useFocusEffect để tải dữ liệu khi màn hình được focus
+    useFocusEffect(useCallback(() => { 
+        loadStats(activeFilter, customDate); 
+    }, [loadStats, activeFilter, customDate])); // Thêm activeFilter và customDate vào dependencies
+
+    // Hàm xử lý chọn ngày từ Calendar (cho chế độ 'day' và 'week')
+    const onDayPress = useCallback((day) => { 
+        setDatePickerVisible(false); // Đóng picker ngay lập tức
+        const selectedMoment = moment(day.dateString);
+        let newDate;
+
+        if (activeFilter === 'week') {
+            newDate = selectedMoment.startOf('isoWeek').toDate(); // Lấy Thứ Hai đầu tuần (ISO week starts on Monday)
+        } else { // 'custom' hoặc 'today'
+            newDate = selectedMoment.toDate();
+        }
+        setCustomDate(newDate); // Cập nhật customDate
+        setActiveFilter('custom'); // Đặt lại về custom khi chọn ngày cụ thể
+    }, [activeFilter]); // activeFilter là dependency vì nó ảnh hưởng đến logic
+
+    // Hàm xử lý chọn tháng từ Picker
+    const onMonthChange = useCallback((monthValue) => {
+        setDatePickerVisible(false); // Đóng picker ngay lập tức
+        const newDate = new Date(customDate.getFullYear(), monthValue - 1, 1); // Đặt về ngày 1 của tháng được chọn
+        setCustomDate(newDate);
+        // Không cần setActiveFilter('month') ở đây vì nó đã được đặt trước đó khi mở picker
+    }, [customDate]); // customDate là dependency vì nó được dùng để lấy năm hiện tại
+
+    // Hàm xử lý chọn năm từ Picker
+    const onYearChange = useCallback((yearValue) => {
+        setDatePickerVisible(false); // Đóng picker ngay lập tức
+        const newDate = new Date(yearValue, customDate.getMonth(), 1); // Đặt về tháng hiện tại, ngày 1 của năm được chọn
+        setCustomDate(newDate);
+        // Không cần setActiveFilter('year') ở đây vì nó đã được đặt trước đó khi mở picker
+    }, [customDate]); // customDate là dependency vì nó được dùng để lấy tháng hiện tại
+
+    // Cập nhật handleFilterChange để reset customDate khi chuyển tab
+    const handleFilterChange = useCallback((filter) => { 
+        setActiveFilter(filter); 
+        // Khi chuyển tab, đặt lại customDate về ngày hiện tại để phù hợp với chế độ lọc
+        // Việc này cũng sẽ kích hoạt lại loadStats thông qua useEffect
+        setCustomDate(new Date()); 
+    }, []);
+
+    // Tính toán minDate và maxDate cho Calendar (chỉ áp dụng cho chế độ 'custom'/'today')
+    const today = moment().format('YYYY-MM-DD');
+    const thirtyDaysAgo = moment().subtract(30, 'days').format('YYYY-MM-DD');
+
+    const years = useMemo(() => {
+        return Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i); // Lấy 5 năm gần đây
+    }, []);
 
     const processAdminPersonalData = useCallback((reports) => {
         let totalRevenue = 0;
@@ -309,18 +390,21 @@ const AdminStatisticsDashboard = () => {
 
         // Leaderboard (Employee Performance)
         const employeeData = currentReports.reduce((acc, report) => {
-            const { employeeName, userId, price, partnerId, partnerName } = report;
-            const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
+            const { employeeName, userId, price, partnerId, partnerName, participantIds } = report;
+            const numParticipants = (participantIds && Array.isArray(participantIds) && participantIds.length > 0) ? participantIds.length : 1;
             const revenueShare = (price || 0) / numParticipants;
 
+            // Kiểm tra và thêm userId vào acc
             if (userId) {
-                if (!acc[userId]) acc[userId] = { id: userId, name: employeeName, revenue: 0, clients: 0 };
+                if (!acc[userId]) acc[userId] = { id: userId, name: employeeName || 'Không rõ', revenue: 0, clients: 0 };
                 acc[userId].revenue += revenueShare;
-                acc[userId].clients += 1;
+                acc[userId].clients += 1; // Clients based on reports this employee was involved in
             }
+            // Kiểm tra và thêm partnerId vào acc (nếu khác userId)
             if (partnerId && partnerId !== userId) {
                 if (!acc[partnerId]) acc[partnerId] = { id: partnerId, name: partnerName || 'Không rõ', revenue: 0, clients: 0 };
                 acc[partnerId].revenue += revenueShare;
+                // Client count for partner is not directly available from this report's structure
             }
             return acc;
         }, {});
@@ -341,23 +425,9 @@ const AdminStatisticsDashboard = () => {
             legendFontSize: 15
         }));
         setPieChartData(pieData);
-    }, [initializeDailyData, getFormattedDateKey]);
+    }, [initializeDailyData, getFormattedDateKey, user?.uid]); // Add user?.uid to processData dependencies
 
-    useFocusEffect(useCallback(() => { fetchStatisticsData(); }, [fetchStatisticsData]));
-    
-    const onDayPress = useCallback((day) => { 
-        const newDate = new Date(day.dateString + 'T00:00:00'); 
-        setDatePickerVisible(false); 
-        setCustomDate(newDate); 
-        setActiveFilter('custom'); 
-    }, []);
-    
-    const handleFilterChange = useCallback((filter) => { 
-        setActiveFilter(filter); 
-        if(filter !== 'custom') { 
-            setCustomDate(new Date()); 
-        } 
-    }, []);
+
     
     const getSelectedDateString = useCallback(() => { 
         const year = customDate.getFullYear(); 
@@ -399,17 +469,11 @@ const AdminStatisticsDashboard = () => {
                     </TouchableOpacity>
                 </View>
                 <TimeFilterSegment activeFilter={activeFilter} onFilterChange={handleFilterChange} />
-                {loading ? (
-                    <View style={styles.lottieContainer}>
-                        {/* <LottieView
-                            source={require('../../../assets/loading.json')}
-                            autoPlay
-                            loop
-                            style={styles.lottieSpinner}
-                        /> */}
-                        <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
-                    </View>
-                ) : (
+                {/* Sử dụng LoadingOverlay */}
+                <LoadingOverlay isVisible={loading} message="Đang tải dữ liệu..." />
+
+                {/* Chỉ hiển thị nội dung khi không loading */}
+                {!loading && (
                     <>
                         {/* Thẻ thống kê tổng quát của CỬA HÀNG */}
                         <Text style={styles.sectionHeading}>Thống kê tổng cửa hàng</Text>
@@ -434,14 +498,7 @@ const AdminStatisticsDashboard = () => {
                             />
                         </View>
 
-                        {/* Biểu đồ Doanh thu của CỬA HÀNG */}
-                        {/* <StatsChart 
-                            data={chartData} 
-                            title="Biểu đồ Doanh thu (triệu VNĐ) toàn cửa hàng" 
-                            style={styles.chartCard} 
-                        /> */}
-
-                         {/* Biểu đồ Doanh thu của CỬA HÀNG (StatsChart lớn) */}
+                        {/* Biểu đồ Doanh thu của CỬA HÀNG (StatsChart lớn) */}
                         <StatsChart
                             data={chartData}
                             title="Biểu đồ Doanh thu toàn cửa hàng" // Đổi VNĐ sang ₫
@@ -499,17 +556,49 @@ const AdminStatisticsDashboard = () => {
                     <View style={styles.datePickerBackdrop}>
                         <TouchableWithoutFeedback>
                             <View style={styles.datePickerContent}>
-                                <Calendar 
-                                    current={getSelectedDateString()} 
-                                    onDayPress={onDayPress} 
-                                    markedDates={{ 
-                                        [getSelectedDateString()]: {
-                                            selected: true, 
-                                            disableTouchEvent: true, 
-                                            selectedColor: COLORS.primary
-                                        } 
-                                    }} 
-                                />
+                                {activeFilter === 'custom' || activeFilter === 'today' || activeFilter === 'week' ? (
+                                    <Calendar
+                                        current={moment(customDate).format('YYYY-MM-DD')} // Luôn hiển thị tháng của customDate
+                                        onDayPress={onDayPress}
+                                        markedDates={{
+                                            [moment(customDate).format('YYYY-MM-DD')]: { // Đánh dấu ngày được chọn
+                                                selected: true,
+                                                disableTouchEvent: true,
+                                                selectedColor: COLORS.primary
+                                            }
+                                        }}
+                                        minDate={activeFilter === 'custom' || activeFilter === 'today' ? thirtyDaysAgo : undefined} // Chỉ giới hạn ngày cho chế độ ngày
+                                        maxDate={activeFilter === 'custom' || activeFilter === 'today' ? today : undefined}      // Chỉ giới hạn ngày cho chế độ ngày
+                                    />
+                                ) : activeFilter === 'month' ? (
+                                    <View>
+                                        <Text style={styles.pickerTitle}>Chọn tháng</Text>
+                                        <Picker
+                                            selectedValue={customDate.getMonth() + 1} // Month is 0-indexed in JS Date
+                                            onValueChange={(itemValue) => onMonthChange(itemValue)}
+                                            style={styles.picker}
+                                            itemStyle={styles.pickerItem}
+                                        >
+                                            {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                                                <Picker.Item key={month} label={`Tháng ${month}`} value={month} />
+                                            ))}
+                                        </Picker>
+                                    </View>
+                                ) : activeFilter === 'year' ? (
+                                    <View>
+                                        <Text style={styles.pickerTitle}>Chọn năm</Text>
+                                        <Picker
+                                            selectedValue={customDate.getFullYear()}
+                                            onValueChange={(itemValue) => onYearChange(itemValue)}
+                                            style={styles.picker}
+                                            itemStyle={styles.pickerItem}
+                                        >
+                                            {years.map((year) => (
+                                                <Picker.Item key={year} label={`Năm ${year}`} value={year} />
+                                            ))}
+                                        </Picker>
+                                    </View>
+                                ) : null}
                             </View>
                         </TouchableWithoutFeedback>
                     </View>
@@ -629,6 +718,23 @@ const styles = StyleSheet.create({
         marginTop: 0,
         fontSize: 16,
         color: COLORS.secondary,
+    },
+    pickerTitle: { // Style cho tiêu đề của picker
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.primary,
+        textAlign: 'center',
+        marginTop: 10,
+        marginBottom: 5,
+    },
+    picker: { // Style cho picker container
+        width: '100%',
+        height: 200, 
+    },
+    pickerItem: { // Style cho từng item trong picker
+        fontSize: 16,
+        height: 200,
+        color: Colors.black, 
     },
 });
 

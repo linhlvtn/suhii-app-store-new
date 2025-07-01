@@ -7,7 +7,6 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
-// import LottieView from 'lottie-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import moment from 'moment';
@@ -20,7 +19,8 @@ import TimeFilterSegment from '../screens/Statistics/components/TimeFilterSegmen
 import StatsChart from '../screens/Statistics/components/StatsChart';
 import ServicePieChart from '../screens/Statistics/components/ServicePieChart';
 import RankItem from '../screens/Statistics/components/RankItem';
-import LoadingOverlay from '../components/LoadingOverlay'; // <-- Đảm bảo import LoadingOverlay
+// import LoadingOverlay from '../components/LoadingOverlay'; // <-- ĐÃ LOẠI BỎ IMPORT NÀY
+import { Picker } from '@react-native-picker/picker'; // Import Picker
 
 LocaleConfig.locales['vi'] = { monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'], dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'], today: 'Hôm nay' };
 LocaleConfig.defaultLocale = 'vi';
@@ -39,38 +39,34 @@ const COLORS = {
     rejected: '#D32F2F',
 };
 
-const getDateRange = (period, customDate = null) => {
-    const now = new Date();
+const getDateRange = (period, baseDate = null) => { 
+    const date = baseDate ? new Date(baseDate) : new Date(); 
     let startDate, endDate;
 
-    if (period === 'custom' && customDate) {
-        startDate = new Date(customDate);
-        endDate = new Date(customDate);
-    } else {
-        switch (period) {
-            case 'today':
-                startDate = new Date(now);
-                endDate = new Date(now);
-                break;
-            case 'week':
-                const dayOfWeek = now.getDay();
-                const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Lấy thứ Hai đầu tuần
-                startDate = new Date(now.setDate(diff));
-                endDate = new Date(startDate);
-                endDate.setDate(startDate.getDate() + 6); // Kết thúc Chủ Nhật
-                break;
-            case 'month':
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Ngày cuối cùng của tháng hiện tại
-                break;
-            case 'year':
-                startDate = new Date(now.getFullYear(), 0, 1);
-                endDate = new Date(now.getFullYear(), 11, 31); // Ngày cuối cùng của năm hiện tại
-                break;
-            default: // Mặc định là hôm nay nếu không nhận dạng được period
-                startDate = new Date(now);
-                endDate = new Date(now);
-        }
+    switch (period) {
+        case 'today':
+        case 'custom':
+            startDate = new Date(date);
+            endDate = new Date(date);
+            break;
+        case 'week':
+            const dayOfWeek = date.getDay(); 
+            const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); 
+            startDate = new Date(date.setDate(diff));
+            endDate = new Date(startDate);
+            endDate.setDate(startDate.getDate() + 6); 
+            break;
+        case 'month':
+            startDate = new Date(date.getFullYear(), date.getMonth(), 1);
+            endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0); 
+            break;
+        case 'year':
+            startDate = new Date(date.getFullYear(), 0, 1);
+            endDate = new Date(date.getFullYear(), 11, 31); 
+            break;
+        default: 
+            startDate = new Date(date);
+            endDate = new Date(date);
     }
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
@@ -81,21 +77,20 @@ const getDynamicTitle = (period, date) => {
     const now = new Date();
     const titleText = (() => {
         if (period === 'custom' && date) {
-            return `Ngày ${date.toLocaleDateString('vi-VN')}`;
+            return `Ngày ${moment(date).format('DD/MM/YYYY')}`;
         }
         switch (period) {
             case 'today':
-                return `Hôm nay, ${now.toLocaleDateString('vi-VN')}`;
+                return `Hôm nay, ${moment(now).format('DD/MM/YYYY')}`;
             case 'week': {
-                const startOfWeek = getDateRange('week').startDate.toDate();
-                const endOfWeek = new Date(startOfWeek);
-                endOfWeek.setDate(endOfWeek.getDate() + 6);
-                return `Tuần này (${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1} - ${endOfWeek.getDate()}/${endOfWeek.getMonth() + 1})`;
+                const startOfWeek = getDateRange('week', date).startDate.toDate(); 
+                const endOfWeek = getDateRange('week', date).endDate.toDate();     
+                return `Tuần (${moment(startOfWeek).format('DD/MM')} - ${moment(endOfWeek).format('DD/MM')})`;
             }
             case 'month':
-                return `Tháng ${now.getMonth() + 1}, ${now.getFullYear()}`;
+                return `Tháng ${moment(date).format('MM,YYYY')}`; 
             case 'year':
-                return `Năm ${now.getFullYear()}`;
+                return `Năm ${moment(date).format('YYYY')}`;       
             default:
                 return 'Tổng quan';
         }
@@ -162,7 +157,7 @@ const EmployeeStatisticsScreen = () => {
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedPeriod, setSelectedPeriod] = useState('today');
-    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState(new Date()); 
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
 
     const [totalRevenue, setTotalRevenue] = useState(0);
@@ -182,14 +177,14 @@ const EmployeeStatisticsScreen = () => {
         }
     };
 
-    const fetchEmployeeStats = useCallback(async () => {
+    // Hàm fetchEmployeeStatsData chỉ lấy và xử lý dữ liệu, không quản lý loading state
+    const fetchEmployeeStatsData = useCallback(async (period, date) => {
         if (!employeeId) {
-            setLoading(false);
+            console.warn("Employee ID not found, skipping data fetch.");
             return;
         }
-        setLoading(true);
 
-        const { startDate, endDate } = getDateRange(selectedPeriod, selectedDate);
+        const { startDate, endDate } = getDateRange(period, date);
 
         try {
             const q = query(
@@ -199,12 +194,39 @@ const EmployeeStatisticsScreen = () => {
                 where("createdAt", "<=", endDate),
                 orderBy("createdAt", "asc")
             );
-            const querySnapshot = await getDocs(q);
+            
+            // Tạo một Promise timeout
+            const timeoutPromise = new Promise((resolve, reject) => {
+                const id = setTimeout(() => {
+                    clearTimeout(id);
+                    reject(new Error("Firebase query timed out after 15 seconds. This might indicate a missing index or a very large dataset."));
+                }, 15000); // 15 giây timeout
+            });
+
+            // Chạy truy vấn getDocs song song với timeout
+            const querySnapshot = await Promise.race([
+                getDocs(q),
+                timeoutPromise
+            ]);
+
+            // Đảm bảo querySnapshot là hợp lệ trước khi sử dụng
+            if (!querySnapshot || !querySnapshot.docs) {
+                console.error("Invalid querySnapshot received or timeout occurred:", querySnapshot);
+                throw new Error("Invalid data received from Firebase query or query timed out.");
+            }
+
             const fetchedReports = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
+
+            // Kiểm tra fetchedReports có phải là mảng không trước khi forEach
+            if (!Array.isArray(fetchedReports)) {
+                console.error("fetchedReports is not an array:", fetchedReports);
+                throw new Error("Fetched reports data is corrupted: not an array.");
+            }
+
 
             let currentTotalRevenue = 0;
             let currentCalculatedActualRevenue = 0;
-            const dailyRevenueForChart = initializeDailyData(startDate.toDate(), endDate.toDate(), selectedPeriod);
+            const dailyRevenueForChart = initializeDailyData(startDate.toDate(), endDate.toDate(), period); 
             const serviceCounts = {};
 
             const currentUsers = users || []; 
@@ -219,7 +241,6 @@ const EmployeeStatisticsScreen = () => {
 
                 let revenuePerThisEmployeeActual = 0;
                 if (report.status === 'approved') {
-                    // ĐÃ SỬA: Khai báo personalShareAmount ở đây để nó có sẵn
                     const personalShareAmount = reportPrice / numParticipants; 
 
                     if (report.isOvertime) {
@@ -236,7 +257,7 @@ const EmployeeStatisticsScreen = () => {
                     const personalRevenueShare = (report.userId === employeeId || report.partnerId === employeeId) ? reportPrice / numParticipants : 0;
                     currentTotalRevenue += personalRevenueShare; 
 
-                    const dateKey = getFormattedDateKey(report.createdAt, selectedPeriod);
+                    const dateKey = getFormattedDateKey(report.createdAt, period); 
                     if (dailyRevenueForChart[dateKey] !== undefined) {
                         dailyRevenueForChart[dateKey] += personalRevenueShare / 1000000;
                     }
@@ -298,25 +319,65 @@ const EmployeeStatisticsScreen = () => {
             setEmployeeRankings(sortedEmployeeRankings);
 
         } catch (error) {
-            console.error("Lỗi khi tải hóa đơn thống kê cá nhân:", error);
-            Alert.alert("Lỗi", "Không thể tải dữ liệu thống kê cá nhân.");
+            console.error("Lỗi khi tải hóa đơn thống kê cá nhân (trong fetchEmployeeStatsData):", error);
+            Alert.alert("Lỗi", `Không thể tải dữ liệu thống kê cá nhân: ${error.message || error}`);
+            throw error; 
+        }
+    }, [employeeId, users]); 
+
+    // Hàm tổng quát để tải dữ liệu và quản lý trạng thái loading
+    const loadStats = useCallback(async (period, date) => {
+        setLoading(true);
+        try {
+            await fetchEmployeeStatsData(period, date);
+        } catch (error) {
+            console.error("loadStats: Error during data loading:", error);
         } finally {
             setLoading(false);
         }
-    }, [employeeId, selectedPeriod, selectedDate, userRole, users, authUser]);
-
+    }, [fetchEmployeeStatsData]);
 
     useEffect(() => {
         if (authUser && (userRole === 'employee' || employeeId)) {
-            fetchEmployeeStats();
+            loadStats(selectedPeriod, selectedDate);
         }
-    }, [fetchEmployeeStats, authUser, employeeId, userRole]);
+    }, [loadStats, authUser, employeeId, userRole, selectedPeriod, selectedDate]); 
 
+    // Hàm xử lý chọn ngày từ Calendar (cho chế độ 'day' và 'week')
     const onDayPress = (day) => {
-        const newDate = new Date(day.dateString + 'T00:00:00');
+        setDatePickerVisible(false); 
+        const selectedMoment = moment(day.dateString);
+        let newDate;
+
+        if (selectedPeriod === 'week') {
+            newDate = selectedMoment.startOf('isoWeek').toDate(); 
+        } else { 
+            newDate = selectedMoment.toDate();
+        }
         setSelectedDate(newDate);
-        setDatePickerVisible(false);
-        setSelectedPeriod('custom');
+    };
+
+    // Hàm xử lý chọn tháng từ Picker
+    const onMonthChange = (monthValue) => {
+        setDatePickerVisible(false); 
+        const newDate = new Date(selectedDate.getFullYear(), monthValue - 1, 1); 
+        setSelectedDate(newDate);
+    };
+
+    // Hàm xử lý chọn năm từ Picker
+    const onYearChange = (yearValue) => {
+        setDatePickerVisible(false); 
+        const newDate = new Date(yearValue, selectedDate.getMonth(), 1); 
+        setSelectedDate(newDate);
+    };
+
+    // Hàm xử lý khi thay đổi bộ lọc thời gian từ TimeFilterSegment
+    const handleFilterChange = (period) => {
+        setSelectedPeriod(period);
+        // Reset date to current if not custom, to avoid old date with new period context
+        if (period !== 'custom') {
+            setSelectedDate(new Date()); 
+        }
     };
 
     const getSelectedDateString = () => {
@@ -326,7 +387,13 @@ const EmployeeStatisticsScreen = () => {
         return `${year}-${month}-${day}`;
     };
 
-    const renderReportItem = ({ item }) => {
+    const today = moment().format('YYYY-MM-DD');
+    const thirtyDaysAgo = moment().subtract(30, 'days').format('YYYY-MM-DD');
+
+    const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i); 
+
+    // Memoize renderReportItem để tránh re-render không cần thiết
+    const renderReportItem = useCallback(({ item }) => {
         const statusMap = {
             approved: { icon: 'checkmark-circle', color: COLORS.approved },
             pending: { icon: 'time-outline', color: COLORS.pending },
@@ -349,13 +416,12 @@ const EmployeeStatisticsScreen = () => {
              const overtimeRate = item.overtimeRate !== undefined ? item.overtimeRate : 0.30;   
 
              if (item.userId === employeeId || item.partnerId === employeeId) {
-                // ĐÃ SỬA: Khai báo personalShareAmount ở đây để nó có sẵn
                 const personalShareAmount = reportPrice / numParticipants; 
 
                 if (item.isOvertime) {
                     actualPerReport = reportPrice * overtimeRate;
                 } else {
-                    actualPerReport = personalShareAmount * commissionRate; // Sử dụng biến đã khai báo
+                    actualPerReport = personalShareAmount * commissionRate; 
                 }
              }
 
@@ -430,7 +496,7 @@ const EmployeeStatisticsScreen = () => {
                 </View>
             </TouchableWithoutFeedback>
         );
-    };
+    }, [employeeId]); 
 
     return (
         <View style={styles.container}>
@@ -439,17 +505,49 @@ const EmployeeStatisticsScreen = () => {
                     <View style={styles.datePickerBackdrop}>
                         <TouchableWithoutFeedback>
                             <View style={styles.datePickerContent}>
-                                <Calendar
-                                    current={getSelectedDateString()}
-                                    onDayPress={onDayPress}
-                                    markedDates={{
-                                        [getSelectedDateString()]: {
-                                            selected: true,
-                                            disableTouchEvent: true,
-                                            selectedColor: COLORS.primary
-                                        }
-                                    }}
-                                />
+                                {selectedPeriod === 'custom' || selectedPeriod === 'today' || selectedPeriod === 'week' ? (
+                                    <Calendar
+                                        current={moment(selectedDate).format('YYYY-MM-DD')} 
+                                        onDayPress={onDayPress}
+                                        markedDates={{
+                                            [moment(selectedDate).format('YYYY-MM-DD')]: { 
+                                                selected: true,
+                                                disableTouchEvent: true,
+                                                selectedColor: COLORS.primary
+                                            }
+                                        }}
+                                        minDate={selectedPeriod === 'custom' || selectedPeriod === 'today' ? thirtyDaysAgo : undefined} 
+                                        maxDate={selectedPeriod === 'custom' || selectedPeriod === 'today' ? today : undefined}      
+                                    />
+                                ) : selectedPeriod === 'month' ? (
+                                    <View>
+                                        <Text style={styles.pickerTitle}>Chọn tháng</Text>
+                                        <Picker
+                                            selectedValue={selectedDate.getMonth() + 1} 
+                                            onValueChange={(itemValue) => onMonthChange(itemValue)}
+                                            style={styles.picker}
+                                            itemStyle={styles.pickerItem}
+                                        >
+                                            {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                                                <Picker.Item key={month} label={`Tháng ${month}`} value={month} />
+                                            ))}
+                                        </Picker>
+                                    </View>
+                                ) : selectedPeriod === 'year' ? (
+                                    <View>
+                                        <Text style={styles.pickerTitle}>Chọn năm</Text>
+                                        <Picker
+                                            selectedValue={selectedDate.getFullYear()}
+                                            onValueChange={(itemValue) => onYearChange(itemValue)}
+                                            style={styles.picker}
+                                            itemStyle={styles.pickerItem}
+                                        >
+                                            {years.map((year) => (
+                                                <Picker.Item key={year} label={`Năm ${year}`} value={year} />
+                                            ))}
+                                        </Picker>
+                                    </View>
+                                ) : null}
                             </View>
                         </TouchableWithoutFeedback>
                     </View>
@@ -474,13 +572,15 @@ const EmployeeStatisticsScreen = () => {
                         <Ionicons name="calendar-outline" size={22} color={COLORS.secondary} style={{ marginLeft: 8 }}/>
                     </TouchableOpacity>
                 </View>
-                <TimeFilterSegment activeFilter={selectedPeriod} onFilterChange={setSelectedPeriod} style={styles.timeFilterSegmentMargin} />
+                <TimeFilterSegment activeFilter={selectedPeriod} onFilterChange={handleFilterChange} style={styles.timeFilterSegmentMargin} />
                 
-                {/* Sử dụng LoadingOverlay */}
-                <LoadingOverlay isVisible={loading} message="Đang tải dữ liệu..." />
-
-                {/* Chỉ hiển thị nội dung khi không loading */}
-                {!loading && (
+                {/* THAY THẾ LOADING OVERLAY BẰNG ACTIVITY INDICATOR ĐƠN GIẢN */}
+                {loading ? (
+                    <View style={styles.simpleLoadingContainer}>
+                        <ActivityIndicator size="large" color={COLORS.primary} />
+                        <Text style={styles.simpleLoadingText}>Đang tải dữ liệu...</Text>
+                    </View>
+                ) : (
                     <>
                         <View style={styles.summaryCardWrapper}>
                             <SummaryCard
@@ -515,7 +615,7 @@ const EmployeeStatisticsScreen = () => {
                         />
                         <ServicePieChart data={pieChartData} title="Tỷ lệ dịch vụ theo cá nhân" style={styles.chartCardMargin} />
 
-                        {employeeRankings.length > 0 && (
+                        {/* {employeeRankings.length > 0 && (
                             <View style={styles.card}>
                                 <Text style={styles.cardTitle}>Xếp hạng nhân viên (theo hoa hồng)</Text>
                                 {employeeRankings.map((employee, index) => (
@@ -524,7 +624,7 @@ const EmployeeStatisticsScreen = () => {
                                     </TouchableOpacity>
                                 ))}
                             </View>
-                        )}
+                        )} */}
 
 
                         {reports.length > 0 ? (
@@ -536,6 +636,10 @@ const EmployeeStatisticsScreen = () => {
                                     renderItem={renderReportItem}
                                     scrollEnabled={false}
                                     ItemSeparatorComponent={() => <View style={styles.reportSeparator} />}
+                                    initialNumToRender={10} 
+                                    maxToRenderPerBatch={5}  
+                                    updateCellsBatchingPeriod={100} 
+                                    removeClippedSubviews={true} 
                                 />
                             </View>
                         ) : (
@@ -552,21 +656,8 @@ const EmployeeStatisticsScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.lightGray },
-    loadingContainer: { // Sẽ được quản lý bởi LoadingOverlay
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: COLORS.lightGray,
-    },
-    lottie: { // Sẽ được quản lý bởi LoadingOverlay (hoặc xóa nếu không dùng lottie)
-        width: 150,
-        height: 150,
-    },
-    loadingText: { // Sẽ được quản lý bởi LoadingOverlay
-        marginTop: 10,
-        fontSize: 16,
-        color: COLORS.gray,
-    },
+    // Loại bỏ lottieContainer và lottieSpinner nếu không dùng Lottie
+    // loadingContainer và loadingText sẽ được thay thế bằng simpleLoadingContainer và simpleLoadingText
     screenTitle: {
         fontSize: 24,
         fontWeight: 'bold',
@@ -633,7 +724,7 @@ const styles = StyleSheet.create({
     },
     summaryCardWrapper: {
         marginHorizontal: 20,
-        marginBottom: 10,
+        marginBottom: 0,
     },
     reportsListSection: {
         backgroundColor: COLORS.white,
@@ -753,21 +844,36 @@ const styles = StyleSheet.create({
         marginHorizontal: 20,
         marginBottom: 20,
     },
-    lottieContainer: {
+    // Styles cho loading đơn giản mới
+    simpleLoadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        height: 350,
-        backgroundColor: COLORS.lightGray,
+        height: 200, // Chiều cao hợp lý để loading spinner hiển thị
+        marginTop: 50,
+        // Không cần background overlay vì ActivityIndicator không full màn hình
     },
-    lottieSpinner: {
-        width: 150,
-        height: 150,
-    },
-    loadingText: {
-        marginTop: 0, 
+    simpleLoadingText: {
+        marginTop: 10,
         fontSize: 16,
-        color: COLORS.secondary, 
+        color: COLORS.secondary,
+    },
+    pickerTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.primary,
+        textAlign: 'center',
+        marginTop: 10,
+        marginBottom: 5,
+    },
+    picker: {
+        width: '100%',
+        height: 200, 
+    },
+    pickerItem: {
+        fontSize: 16,
+        height: 200, 
+        color: COLORS.black,
     },
 });
 

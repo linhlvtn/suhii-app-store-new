@@ -1,7 +1,7 @@
 // src/screens/CreateReportScreen.js
 
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, Platform, TouchableWithoutFeedback } from 'react-native'; // Xóa ActivityIndicator
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, Platform, TouchableWithoutFeedback } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { db, auth } from '../../firebaseConfig'; 
@@ -14,7 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../src/context/AuthContext'; 
 
 import { useCommissionRates } from '../hooks/useCommissionRates'; 
-import LoadingOverlay from '../components/LoadingOverlay'; // <-- THÊM DÒNG NÀY ĐỂ IMPORT COMPONENT MỚI
+import LoadingOverlay from '../components/LoadingOverlay'; 
 
 const COLORS = {
     black: '#121212',
@@ -68,7 +68,7 @@ const PAYMENT_OPTIONS = [
 const CreateReportScreen = () => {
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
-    const { user, userRole } = useAuth(); 
+    const { user, userRole, users } = useAuth(); // Lấy users từ AuthContext
 
     const [price, setPrice] = useState('');
     const [rawPrice, setRawPrice] = useState('');
@@ -77,38 +77,31 @@ const CreateReportScreen = () => {
     const [paymentMethod, setPaymentMethod] = useState(PAYMENT_OPTIONS[0].value);
     const [imageUri, setImageUri] = useState(null);
     const [uploading, setUploading] = useState(false);
-    const [employees, setEmployees] = useState([]);
+    
+    // States cho người làm cùng
     const [selectedPartner, setSelectedPartner] = useState(null);
-    const [isPickerModalVisible, setPickerModalVisible] = useState(false);
+    const [isPartnerPickerModalVisible, setPartnerPickerModalVisible] = useState(false);
     const [tempPartner, setTempPartner] = useState(null);
+
+    // States cho người làm báo cáo hộ (chỉ admin)
+    const [selectedReportForEmployee, setSelectedReportForEmployee] = useState(null);
+    const [isReportForPickerModalVisible, setReportForPickerModalVisible] = useState(false);
+    const [tempReportForEmployee, setTempReportForEmployee] = useState(null);
 
     const [isOvertime, setIsOvertime] = useState(false);
 
     const { defaultRevenuePercentage, overtimePercentage, isLoading: ratesLoading } = useCommissionRates(); 
 
-    useEffect(() => {
-        const fetchAllUsers = async () => {
-            const currentUser = auth.currentUser;
-            if (!currentUser) return;
-            try {
-                const usersRef = collection(db, 'users');
-                const q = query(usersRef);
-                const querySnapshot = await getDocs(q);
+    // Lọc danh sách nhân viên cho "Người làm cùng": Loại bỏ chính người dùng đang đăng nhập
+    const availableEmployeesForPicker = (users || []).filter(u => u.id !== user?.uid); 
+    
+    // Danh sách nhân viên cho "Làm hóa đơn hộ": Loại bỏ chính người dùng đang đăng nhập
+    // (Admin không thể làm hộ cho chính mình)
+    const allEmployeesForReportFor = (users || []).filter(u => u.id !== user?.uid); 
 
-                const userList = [];
-                querySnapshot.forEach((doc) => {
-                    if (doc.id !== currentUser.uid) { 
-                        userList.push({ id: doc.id, ...doc.data() });
-                    }
-                });
-                setEmployees(userList);
-            } catch (error) {
-                console.error("Lỗi khi tải danh sách người dùng:", error); 
-                Alert.alert("Lỗi", "Không thể tải danh sách người dùng."); 
-            }
-        };
-        fetchAllUsers();
-    }, []);
+    // useEffect để mặc định chọn nhân viên đầu tiên cho "Làm hóa đơn hộ" đã bị loại bỏ
+    // để nó mặc định là null (Không chọn) như yêu cầu.
+
 
     // --- CÁC HÀM XỬ LÝ ---
     const handleServiceSelection = (value) => { setSelectedServices((prev) => prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]); };
@@ -185,20 +178,54 @@ const CreateReportScreen = () => {
             const currentUser = auth.currentUser;
             if (!currentUser) { throw new Error("Người dùng chưa đăng nhập."); }
 
-            const currentEmployeeName = currentUser.displayName || currentUser.email.split('@')[0]; 
+            // --- XÁC ĐỊNH NGƯỜI LÀM BÁO CÁO CHÍNH (userId) ---
+            let reportUserId = currentUser.uid;
+            let reportUserEmail = currentUser.email;
+            let reportEmployeeName = currentUser.displayName || currentUser.email.split('@')[0];
+            
+            // Trường để lưu thông tin admin nếu họ làm hộ
+            let adminMadeForId = null; 
+            let adminMadeForName = null; 
+
+            // Nếu admin làm hóa đơn hộ cho nhân viên khác (selectedReportForEmployee có giá trị)
+            if (userRole === 'admin' && selectedReportForEmployee) {
+                const employeeMadeFor = (users || []).find(u => u.id === selectedReportForEmployee); 
+                if (employeeMadeFor) {
+                    reportUserId = employeeMadeFor.id; // UserId của báo cáo là nhân viên được admin chọn
+                    reportUserEmail = employeeMadeFor.email;
+                    reportEmployeeName = employeeMadeFor.displayName || employeeMadeFor.email.split('@')[0];
+                    
+                    adminMadeForId = currentUser.uid; // ID của admin làm hộ
+                    adminMadeForName = currentUser.displayName || currentUser.email.split('@')[0]; // Tên của admin làm hộ
+                }
+            }
 
             let partnerName = null;
             if (selectedPartner) {
-                const partner = employees.find(e => e.id === selectedPartner);
+                const partner = (users || []).find(e => e.id === selectedPartner); 
                 if (partner) {
                     partnerName = partner.displayName || partner.email.split('@')[0];
                 }
             }
-
-            const participantIds = [currentUser.uid];
-            if (selectedPartner && selectedPartner !== currentUser.uid) {
-                participantIds.push(selectedPartner);
+            
+            // --- XÁC ĐỊNH DANH SÁCH NGƯỜI THAM GIA (participantIds) ---
+            const uniqueParticipantIds = new Set();
+            
+            // 1. Thêm người làm báo cáo chính (hoặc người được admin làm hộ)
+            if (reportUserId) {
+                uniqueParticipantIds.add(reportUserId);
             }
+            // 2. Thêm người làm cùng (nếu có và không trùng với người làm báo cáo chính)
+            if (selectedPartner && selectedPartner !== reportUserId) { 
+                uniqueParticipantIds.add(selectedPartner);
+            }
+            // 3. Thêm admin vào participantIds CHỈ KHI họ là người làm hộ VÀ KHÔNG phải là người làm báo cáo chính hay người làm cùng
+            if (adminMadeForId && !uniqueParticipantIds.has(adminMadeForId)) {
+                uniqueParticipantIds.add(adminMadeForId);
+            }
+            
+            // Chuyển Set về Array
+            const finalParticipantIds = Array.from(uniqueParticipantIds);
 
             const reportStatus = userRole === 'admin' ? 'approved' : 'pending'; 
 
@@ -206,9 +233,9 @@ const CreateReportScreen = () => {
             const currentOvertimePercentage = overtimePercentage;
 
             const reportData = {
-                userId: currentUser.uid,
-                userEmail: currentUser.email,
-                employeeName: currentEmployeeName,
+                userId: reportUserId, // ID của nhân viên làm báo cáo (hoặc người được admin làm hộ)
+                userEmail: reportUserEmail,
+                employeeName: reportEmployeeName,
                 price: numericPrice,
                 service: selectedServices.join(', '),
                 note: note.trim(),
@@ -219,14 +246,18 @@ const CreateReportScreen = () => {
                 isOvertime: isOvertime,
                 partnerId: selectedPartner || null,
                 partnerName: partnerName,
-                participantIds: participantIds,
+                participantIds: finalParticipantIds, 
                 commissionRate: currentRevenuePercentage / 100, 
                 overtimeRate: currentOvertimePercentage / 100, 
+                // Thêm thông tin nếu admin làm hộ
+                adminMadeForId: adminMadeForId,
+                adminMadeForName: adminMadeForName,
             };
 
             await addDoc(collection(db, 'reports'), reportData);
-            Alert.alert('Thành công', ` đã được tạo và ${userRole === 'admin' ? 'đã duyệt' : 'gửi đi chờ duyệt'}!`); 
+            Alert.alert('Thành công', `Hóa đơn đã được tạo và ${userRole === 'admin' ? 'đã duyệt' : 'gửi đi chờ duyệt'}!`); 
 
+            // Reset form
             setPrice('');
             setRawPrice('');
             setSelectedServices([]);
@@ -234,7 +265,12 @@ const CreateReportScreen = () => {
             setPaymentMethod(PAYMENT_OPTIONS[0].value);
             setImageUri(null);
             setSelectedPartner(null);
+            setTempPartner(null);
             setIsOvertime(false); 
+            // Luôn reset selectedReportForEmployee về null để mặc định là "Không chọn"
+            setSelectedReportForEmployee(null); 
+            setTempReportForEmployee(null);
+            
             navigation.goBack();
         } catch (error) {
             console.error('Lỗi khi gửi hóa đơn:', error); 
@@ -244,10 +280,18 @@ const CreateReportScreen = () => {
         }
     };
 
-    const openPickerModal = () => { setTempPartner(selectedPartner); setPickerModalVisible(true); };
-    const confirmSelection = () => { setSelectedPartner(tempPartner); setPickerModalVisible(false); };
+    // Hàm mở Modal cho Picker Người làm cùng
+    const openPartnerPickerModal = () => { setTempPartner(selectedPartner); setPartnerPickerModalVisible(true); };
+    const confirmPartnerSelection = () => { setSelectedPartner(tempPartner); setPartnerPickerModalVisible(false); };
 
-    const partnerName = selectedPartner ? (employees.find(e => e.id === selectedPartner)?.displayName || 'Không rõ') : '-- Không chọn --';
+    // Hàm mở Modal cho Picker Người làm báo cáo hộ (Admin Only)
+    const openReportForPickerModal = () => { setTempReportForEmployee(selectedReportForEmployee); setReportForPickerModalVisible(true); };
+    const confirmReportForSelection = () => { setSelectedReportForEmployee(tempReportForEmployee); setReportForPickerModalVisible(false); };
+
+
+    const partnerDisplayName = selectedPartner ? (users.find(e => e.id === selectedPartner)?.displayName || users.find(e => e.id === selectedPartner)?.email?.split('@')[0] || 'Không rõ') : '-- Không chọn --';
+    // Hiển thị tên của người được làm hộ, hoặc '-- Không chọn --' nếu chưa chọn
+    const reportForEmployeeDisplayName = selectedReportForEmployee ? (users.find(e => e.id === selectedReportForEmployee)?.displayName || users.find(e => e.id === selectedReportForEmployee)?.email?.split('@')[0] || 'Không rõ') : '-- Không chọn --';
 
     return (
         <View style={styles.fullScreenContainer}>
@@ -267,8 +311,8 @@ const CreateReportScreen = () => {
             />
 
             {/* Modal cho Picker Người làm cùng */}
-            <Modal transparent={true} visible={isPickerModalVisible} animationType="slide" onRequestClose={() => setPickerModalVisible(false)}>
-                <TouchableWithoutFeedback onPress={() => setPickerModalVisible(false)}>
+            <Modal transparent={true} visible={isPartnerPickerModalVisible} animationType="slide" onRequestClose={() => setPartnerPickerModalVisible(false)}>
+                <TouchableWithoutFeedback onPress={() => setPartnerPickerModalVisible(false)}>
                     <View style={styles.modalOverlay}>
                         <TouchableWithoutFeedback>
                             <View style={styles.modalContent}>
@@ -280,12 +324,12 @@ const CreateReportScreen = () => {
                                         itemStyle={styles.pickerItemText}
                                     >
                                         <Picker.Item label="-- Không chọn --" value={null} />
-                                        {employees.map(employee => (
-                                            <Picker.Item key={employee.id} label={employee.displayName || employee.email} value={employee.id} />
+                                        {availableEmployeesForPicker.map(employee => (
+                                            <Picker.Item key={employee.id} label={employee.displayName || employee.email.split('@')[0]} value={employee.id} />
                                         ))}
                                     </Picker>
                                 </View>
-                                <TouchableOpacity style={styles.modalDoneButton} onPress={confirmSelection}>
+                                <TouchableOpacity style={styles.modalDoneButton} onPress={confirmPartnerSelection}>
                                     <Text style={styles.modalDoneButtonText}>Chọn</Text>
                                 </TouchableOpacity>
                             </View>
@@ -294,7 +338,48 @@ const CreateReportScreen = () => {
                 </TouchableWithoutFeedback>
             </Modal>
 
+            {/* Modal cho Picker Người làm báo cáo hộ (Admin Only) */}
+            {userRole === 'admin' && (
+                <Modal transparent={true} visible={isReportForPickerModalVisible} animationType="slide" onRequestClose={() => setReportForPickerModalVisible(false)}>
+                    <TouchableWithoutFeedback onPress={() => setReportForPickerModalVisible(false)}>
+                        <View style={styles.modalOverlay}>
+                            <TouchableWithoutFeedback> 
+                                <View style={styles.modalContent}>
+                                    <Text style={styles.modalTitle}>Làm hóa đơn hộ cho nhân viên</Text>
+                                    <View style={styles.pickerWrapper}>
+                                        <Picker
+                                            selectedValue={tempReportForEmployee}
+                                            onValueChange={(itemValue) => setTempReportForEmployee(itemValue)}
+                                            itemStyle={styles.pickerItemText}
+                                        >
+                                            {/* Mặc định là "Không chọn" */}
+                                            <Picker.Item label="-- Không chọn --" value={null} /> 
+                                            {allEmployeesForReportFor.map(employee => (
+                                                <Picker.Item key={employee.id} label={employee.displayName || employee.email.split('@')[0]} value={employee.id} />
+                                            ))}
+                                        </Picker>
+                                    </View>
+                                    <TouchableOpacity style={styles.modalDoneButton} onPress={confirmReportForSelection}>
+                                        <Text style={styles.modalDoneButtonText}>Chọn</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </TouchableWithoutFeedback> 
+                        </View>
+                    </TouchableWithoutFeedback>
+                </Modal>
+            )}
+
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+                {userRole === 'admin' && (
+                    <View style={styles.card}>
+                        <Text style={styles.label}>Làm hóa đơn hộ cho (Admin Only)</Text>
+                        <TouchableOpacity style={styles.pickerButton} onPress={openReportForPickerModal}>
+                            <Text style={styles.pickerButtonText}>{reportForEmployeeDisplayName}</Text>
+                            <Ionicons name="chevron-down" size={20} color={COLORS.gray} />
+                        </TouchableOpacity>
+                    </View>
+                )}
+
                 <View style={styles.card}>
                     <Text style={styles.label}>Giá tiền (VNĐ)</Text>
                     <TextInput
@@ -332,8 +417,8 @@ const CreateReportScreen = () => {
 
                 <View style={styles.card}>
                     <Text style={styles.label}>Người làm cùng (tùy chọn)</Text>
-                    <TouchableOpacity style={styles.pickerButton} onPress={openPickerModal}>
-                        <Text style={styles.pickerButtonText}>{partnerName}</Text>
+                    <TouchableOpacity style={styles.pickerButton} onPress={openPartnerPickerModal}>
+                        <Text style={styles.pickerButtonText}>{partnerDisplayName}</Text>
                         <Ionicons name="chevron-down" size={20} color={COLORS.gray} />
                     </TouchableOpacity>
                 </View>
@@ -447,9 +532,6 @@ const styles = StyleSheet.create({
     },
     submitButtonDisabled: { backgroundColor: COLORS.gray }, 
     buttonText: { color: COLORS.white, fontSize: 18, fontWeight: 'bold' },
-    // modalBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.6)' }, // Sẽ được quản lý bởi LoadingOverlay
-    // loadingText: { color: COLORS.white, marginTop: 15, fontSize: 16 }, // Sẽ được quản lý bởi LoadingOverlay
-
     checkboxGroup: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
     checkboxContainer: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, width: '48%' }, 
     checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
@@ -487,14 +569,6 @@ const styles = StyleSheet.create({
     modalDoneButton: { backgroundColor: COLORS.primary, borderRadius: 10, padding: 15, alignItems: 'center' },
     modalDoneButtonText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
     pickerItemText: { color: COLORS.black, fontSize: 18 },
-
-    // Xóa styles liên quan đến loading cũ
-    // loadingOverlay: {
-    //     flex: 1,
-    //     justifyContent: 'center',
-    //     alignItems: 'center',
-    //     backgroundColor: COLORS.lightGray, 
-    // },
 });
 
 export default CreateReportScreen;
