@@ -310,34 +310,6 @@ const CreateReportScreen = () => {
                 message={ratesLoading ? "Đang tải cài đặt doanh thu..." : "Đang xử lý..."} 
             />
 
-            {/* Modal cho Picker Người làm cùng */}
-            <Modal transparent={true} visible={isPartnerPickerModalVisible} animationType="slide" onRequestClose={() => setPartnerPickerModalVisible(false)}>
-                <TouchableWithoutFeedback onPress={() => setPartnerPickerModalVisible(false)}>
-                    <View style={styles.modalOverlay}>
-                        <TouchableWithoutFeedback>
-                            <View style={styles.modalContent}>
-                                <Text style={styles.modalTitle}>Chọn người làm cùng</Text>
-                                <View style={styles.pickerWrapper}>
-                                    <Picker
-                                        selectedValue={tempPartner}
-                                        onValueChange={(itemValue) => setTempPartner(itemValue)}
-                                        itemStyle={styles.pickerItemText}
-                                    >
-                                        <Picker.Item label="-- Không chọn --" value={null} />
-                                        {availableEmployeesForPicker.map(employee => (
-                                            <Picker.Item key={employee.id} label={employee.displayName || employee.email.split('@')[0]} value={employee.id} />
-                                        ))}
-                                    </Picker>
-                                </View>
-                                <TouchableOpacity style={styles.modalDoneButton} onPress={confirmPartnerSelection}>
-                                    <Text style={styles.modalDoneButtonText}>Chọn</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </TouchableWithoutFeedback>
-                    </View>
-                </TouchableWithoutFeedback>
-            </Modal>
-
             {/* Modal cho Picker Người làm báo cáo hộ (Admin Only) */}
             {userRole === 'admin' && (
                 <Modal transparent={true} visible={isReportForPickerModalVisible} animationType="slide" onRequestClose={() => setReportForPickerModalVisible(false)}>
@@ -370,16 +342,6 @@ const CreateReportScreen = () => {
             )}
 
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-                {userRole === 'admin' && (
-                    <View style={styles.card}>
-                        <Text style={styles.label}>Làm hóa đơn hộ cho (Admin Only)</Text>
-                        <TouchableOpacity style={styles.pickerButton} onPress={openReportForPickerModal}>
-                            <Text style={styles.pickerButtonText}>{reportForEmployeeDisplayName}</Text>
-                            <Ionicons name="chevron-down" size={20} color={COLORS.gray} />
-                        </TouchableOpacity>
-                    </View>
-                )}
-
                 <View style={styles.card}>
                     <Text style={styles.label}>Giá tiền (VNĐ)</Text>
                     <TextInput
@@ -416,12 +378,50 @@ const CreateReportScreen = () => {
                 </View>
 
                 <View style={styles.card}>
-                    <Text style={styles.label}>Người làm cùng (tùy chọn)</Text>
+                    <Text style={styles.label}>Người làm cùng</Text>
                     <TouchableOpacity style={styles.pickerButton} onPress={openPartnerPickerModal}>
                         <Text style={styles.pickerButtonText}>{partnerDisplayName}</Text>
                         <Ionicons name="chevron-down" size={20} color={COLORS.gray} />
                     </TouchableOpacity>
                 </View>
+
+                {userRole === 'admin' && (
+                    <View style={styles.card}>
+                        <Text style={styles.label}>Làm hóa đơn hộ cho</Text>
+                        <TouchableOpacity style={styles.pickerButton} onPress={openReportForPickerModal}>
+                            <Text style={styles.pickerButtonText}>{reportForEmployeeDisplayName}</Text>
+                            <Ionicons name="chevron-down" size={20} color={COLORS.gray} />
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* Modal cho Picker Người làm cùng */}
+                <Modal transparent={true} visible={isPartnerPickerModalVisible} animationType="slide" onRequestClose={() => setPartnerPickerModalVisible(false)}>
+                    <TouchableWithoutFeedback onPress={() => setPartnerPickerModalVisible(false)}>
+                        <View style={styles.modalOverlay}>
+                            <TouchableWithoutFeedback>
+                                <View style={styles.modalContent}>
+                                    <Text style={styles.modalTitle}>Chọn người làm cùng</Text>
+                                    <View style={styles.pickerWrapper}>
+                                        <Picker
+                                            selectedValue={tempPartner}
+                                            onValueChange={(itemValue) => setTempPartner(itemValue)}
+                                            itemStyle={styles.pickerItemText}
+                                        >
+                                            <Picker.Item label="-- Không chọn --" value={null} />
+                                            {availableEmployeesForPicker.map(employee => (
+                                                <Picker.Item key={employee.id} label={employee.displayName || employee.email.split('@')[0]} value={employee.id} />
+                                            ))}
+                                        </Picker>
+                                    </View>
+                                    <TouchableOpacity style={styles.modalDoneButton} onPress={confirmPartnerSelection}>
+                                        <Text style={styles.modalDoneButtonText}>Chọn</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </TouchableWithoutFeedback>
+                        </View>
+                    </TouchableWithoutFeedback>
+                </Modal>
 
                 <View style={styles.card}>
                     <Text style={styles.label}>Ghi chú (tùy chọn)</Text>

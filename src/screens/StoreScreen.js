@@ -9,7 +9,7 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useAuth } from '../context/AuthContext';
 import { SwipeListView, SwipeRow } from 'react-native-swipe-list-view';
 
-// Đã loại bỏ import LoadingOverlay
+import LoadingOverlay from '../components/LoadingOverlay'; 
 
 LocaleConfig.locales['vi'] = { 
     monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], 
@@ -29,7 +29,8 @@ const COLORS = {
     pending: '#f39c12', 
     approved: '#28a745', 
     rejected: '#D32F2F', 
-    overtime: '#6a0dad' 
+    overtime: '#6a0dad',
+    green: '#40a829', 
 };
 
 const getFormattedDate = (date) => { 
@@ -59,7 +60,7 @@ const toYYYYMMDD = (date) => {
 
 const HeaderLogo = () => (
     <Image 
-        source={require('../../assets/logo.png')} 
+        source={require('../../assets/logo-main.png')} 
         style={styles.headerLogo} 
         resizeMode="contain" 
     />
@@ -98,13 +99,14 @@ const StoreScreen = () => {
     const [isImageModalVisible, setImageModalVisible] = useState(false);
     const [selectedImageUrl, setSelectedImageUrl] = useState(null);
     const [hasPendingReports, setHasPendingReports] = useState(false);
+    const [todayRevenue, setTodayRevenue] = useState(0); 
     const navigation = useNavigation();
 
     const fetchReports = useCallback(async () => {
         // Đảm bảo luôn trả về một hàm, kể cả khi userRole chưa có
         if (!userRole) { 
-            setLoading(false); // Tắt loading nếu không có userRole để tránh bị kẹt
-            return () => {}; // Trả về hàm rỗng để không gây lỗi undefined
+            setLoading(false); 
+            return () => {}; 
         } 
         setLoading(true); 
         try { 
@@ -150,15 +152,35 @@ const StoreScreen = () => {
         return () => unsubscribe(); 
     }, [userRole]);
 
+    useEffect(() => {
+        const calculateTodayRevenue = () => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); 
+
+            const endOfToday = new Date(today);
+            endOfToday.setHours(23, 59, 59, 999); 
+
+            let revenue = 0;
+            rawReports.forEach(report => {
+                if (report.createdAt && report.createdAt.toDate) {
+                    const reportDate = report.createdAt.toDate();
+                    if (report.status === 'approved' && reportDate >= today && reportDate <= endOfToday) {
+                        revenue += (report.price || 0);
+                    }
+                }
+            });
+            setTodayRevenue(revenue);
+        };
+
+        calculateTodayRevenue();
+    }, [rawReports]);
+
     useFocusEffect(useCallback(() => { 
         let unsubscribeFunc; 
         const setupListener = async () => {
             if (userRole) {
-                // Đảm bảo await fetchReports() để nhận hàm unsubscribe thực sự
-                // hoặc hàm rỗng từ fetchReports
                 unsubscribeFunc = await fetchReports(); 
             } else {
-                // Nếu không có userRole, đảm bảo unsubscribeFunc là một hàm rỗng
                 unsubscribeFunc = () => {};
             }
         };
@@ -301,7 +323,8 @@ const StoreScreen = () => {
         };
         const statusInfo = statusMap[item.status] || { icon: 'help-circle', color: COLORS.gray };
         
-        const canEdit = userRole === 'admin' ? item.status === 'pending' : (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
+        // <-- CHỈNH SỬA LOGIC canEdit CHO ADMIN -->
+        const canEdit = userRole === 'admin' || (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
         const canDelete = userRole === 'admin' || (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
         
         const numberOfParticipants = (item.participantIds && Array.isArray(item.participantIds) && item.participantIds.length > 0) ? item.participantIds.length : 1;
@@ -372,7 +395,7 @@ const StoreScreen = () => {
                                 style={styles.itemImage} 
                             />
                             <View style={styles.statusIconOnImage}>
-                                <Ionicons name={statusInfo.icon} size={26} color={statusInfo.color} />
+                                <Ionicons name={statusInfo.icon} size={12} color={statusInfo.color} />
                             </View>
                         </View>
                         <View style={styles.itemContent}>
@@ -402,22 +425,19 @@ const StoreScreen = () => {
                                         </MenuOptions>
                                     </Menu>
                                 )}
-                                {userRole === 'admin' && (canEdit || canDelete) && (
+                                {userRole === 'admin' && ( // Admin luôn có thể chỉnh sửa và xóa
                                     <Menu>
                                         <MenuTrigger style={styles.menuTrigger}>
                                             <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
                                         </MenuTrigger>
                                         <MenuOptions customStyles={menuOptionsStyles}>
-                                            {canEdit && ( 
-                                                <MenuOption onSelect={() => handleEdit(item)}>
-                                                    <Text>Chỉnh sửa</Text>
-                                                </MenuOption>
-                                            )}
-                                            {canDelete && ( 
-                                                <MenuOption onSelect={() => handleDelete(item.key)}>
-                                                    <Text style={{ color: 'red' }}>Xóa</Text>
-                                                </MenuOption>
-                                            )}
+                                            <MenuOption onSelect={() => handleEdit(item)}>
+                                                <Text>Chỉnh sửa</Text>
+                                            </MenuOption>
+                                            <View style={styles.divider} />
+                                            <MenuOption onSelect={() => handleDelete(item.key)}>
+                                                <Text style={{ color: 'red' }}>Xóa</Text>
+                                            </MenuOption>
                                         </MenuOptions>
                                     </Menu>
                                 )}
@@ -426,21 +446,29 @@ const StoreScreen = () => {
                                 <Text style={styles.sharedPriceText}>
                                     {(item.price || 0).toLocaleString('vi-VN')}₫
                                 </Text>
-                                {item.isOvertime && (
-                                    <Text style={styles.overtimeText}>{`(+${displayOvertimeRate}%)`}</Text>
+                                {/* <-- BỔ SUNG HIỂN THỊ PHƯƠNG THỨC THANH TOÁN --> */}
+                                {item.paymentMethod && (
+                                    <Text style={styles.paymentMethodText}>
+                                        ({item.paymentMethod === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'})
+                                    </Text>
                                 )}
+                                {/* <-- KẾT THÚC BỔ SUNG --> */}
+                                
                             </View>
                             
                             {actualReceivedRevenueText && item.status === 'approved' ? (
                                 <View style={styles.infoRow}>
                                     <Ionicons name="cash" size={16} color={COLORS.approved} />
                                     <Text style={styles.infoText}>Thực nhận: {actualReceivedRevenueText}₫</Text>
+                                    {item.isOvertime && (
+                                        <Text style={styles.overtimeText}>{`(+${displayOvertimeRate}%)`}</Text>
+                                    )}
                                 </View>
                             ) : null}
 
                             <View style={styles.infoRow}>
                                 <Ionicons name="people-outline" size={16} color={COLORS.gray} />
-                                <Text style={styles.infoText}>
+                                <Text style={styles.infoTextAuth}>
                                     {item.employeeName}{item.partnerName && ` & ${item.partnerName}`}
                                 </Text>
                             </View>
@@ -495,12 +523,17 @@ const StoreScreen = () => {
         );
     };
 
-    // Loại bỏ khối if (initializing) và ActivityIndicator trực tiếp ở đây
-    // LoadingOverlay sẽ xử lý việc này
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <View style={{ width: 100 }} />
+                {/* HIỂN THỊ DOANH THU HÔM NAY */}
+                <View style={styles.todayRevenueContainer}>
+                    <Text style={styles.todayRevenueLabel}>Hôm nay</Text>
+                    <Text style={styles.todayRevenueAmount}>
+                        {todayRevenue.toLocaleString('vi-VN')}₫
+                    </Text>
+                </View>
+                
                 <HeaderLogo />
                 <View style={styles.headerRightContainer}>
                     <HeaderLogoutButton />
@@ -542,7 +575,7 @@ const StoreScreen = () => {
                             {selectedDate && (
                                 <TouchableOpacity onPress={clearDateFilter} style={styles.clearDateButton}>
                                     <Ionicons name="close-circle" size={20} color={COLORS.gray} />
-                                </TouchableOpacity>
+                                                </TouchableOpacity>
                             )}
                         </TouchableOpacity>
                     </View>
@@ -595,14 +628,10 @@ const StoreScreen = () => {
             </Modal>
             
             {/* Sử dụng LoadingOverlay cho cả initializing và loading */}
-            {initializing || loading ? (
-                <View style={styles.simpleLoadingContainer}>
-                    <ActivityIndicator size="large" color={COLORS.black} />
-                    <Text style={styles.simpleLoadingText}>
-                        {initializing ? "Đang khởi tạo ứng dụng..." : "Đang tải hóa đơn..."}
-                    </Text>
-                </View>
-            ) : (
+            <LoadingOverlay isVisible={initializing || loading} message={initializing ? "Đang khởi tạo ứng dụng..." : "Đang tải hóa đơn..."} />
+
+            {/* Chỉ hiển thị SwipeListView khi không loading và không initializing */}
+            {!initializing && !loading && (
                 <SwipeListView
                     useSectionList
                     sections={sections}
@@ -652,8 +681,32 @@ const StoreScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f9f9f9' },
-    // fullScreenLoader: { flex: 1, justifyContent: 'center', alignItems: 'center' }, 
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: Platform.OS === 'android' ? 40 : 50, paddingBottom: 10, paddingHorizontal: 15, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: '#eee' },
+    header: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        paddingTop: Platform.OS === 'android' ? 40 : 50, 
+        paddingBottom: 10, 
+        paddingHorizontal: 15, 
+        backgroundColor: COLORS.white, 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#eee' 
+    },
+    todayRevenueContainer: { 
+        alignItems: 'flex-start',
+        flex: 1, 
+        paddingLeft: 5,
+    },
+    todayRevenueLabel: { 
+        fontSize: 12,
+        color: COLORS.gray,
+        marginBottom: 2,
+    },
+    todayRevenueAmount: { 
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.black,
+    },
     headerLogo: { width: 100, height: 40 },
     headerRightContainer: { flexDirection: 'row', alignItems: 'center', width: 100, justifyContent: 'flex-end' },
     headerButton: { width: 45, height: 45, justifyContent: 'center', alignItems: 'center' },
@@ -678,7 +731,7 @@ const styles = StyleSheet.create({
     itemImage: { width: 90, height: 90, borderRadius: 10, backgroundColor: COLORS.lightGray },
     itemContent: { flex: 1, marginLeft: 12, justifyContent: 'center' },
     itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, },
-    serviceText: { fontSize: 16, fontWeight: 'bold', color: COLORS.black, flex: 1, marginRight: 5 },
+    serviceText: { fontSize: 16, fontWeight: '700', color: COLORS.black, flex: 1, marginRight: 5 },
     priceContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, },
     priceText: { fontSize: 16, fontWeight: '600', color: COLORS.rejected },
     sharedPriceText: { 
@@ -691,9 +744,10 @@ const styles = StyleSheet.create({
         color: COLORS.secondary, 
         marginTop: 2, 
     },
-    overtimeText: { marginLeft: 8, fontSize: 14, fontWeight: 'bold', color: COLORS.primary },
+    overtimeText: { marginLeft: 8, fontSize: 12, fontWeight: '700' },
     infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-    infoText: { marginLeft: 8, fontSize: 13, color: COLORS.gray, flexShrink: 1 },
+    infoText: { marginLeft: 8, fontSize: 13, color: COLORS.green, flexShrink: 1 },
+    infoTextAuth: { marginLeft: 8, fontSize: 13, color: COLORS.gray, flexShrink: 1 },
     statusIconOnImage: { position: 'absolute', top: 5, left: 5, backgroundColor: 'rgba(255, 255, 255, 0.8)', borderRadius: 13, padding: 1, },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
     emptyText: { textAlign: 'center', color: COLORS.gray, fontSize: 16 },
@@ -715,18 +769,22 @@ const styles = StyleSheet.create({
     bulkRejectButton: { backgroundColor: COLORS.rejected },
     bulkApproveButton: { backgroundColor: COLORS.approved },
     bulkActionButtonText: { color: COLORS.white, fontWeight: 'bold', marginLeft: 8, fontSize: 14, },
-    simpleLoadingContainer: { // Style mới cho loading đơn giản
+    simpleLoadingContainer: { 
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 50, // Hoặc giá trị phù hợp
-        // Không có background overlay vì ActivityIndicator không full màn hình
+        marginTop: 50, 
     },
-    simpleLoadingText: { // Style cho text loading
+    simpleLoadingText: { 
         marginTop: 10,
         fontSize: 16,
-        color: COLORS.black, // Hoặc màu phù hợp
+        color: COLORS.black, 
     },
+    paymentMethodText: { // <-- Style mới
+        fontSize: 13,
+        color: COLORS.gray,
+        marginLeft: 8,
+    }
 });
 const menuOptionsStyles = { optionsContainer: { borderRadius: 10, padding: 5, marginTop: 25 } };
 

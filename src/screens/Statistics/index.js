@@ -460,7 +460,7 @@ const AdminStatisticsDashboard = () => {
             </View>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.subHeader}>
-                    <Text style={styles.headerLabel}>Tổng quan</Text>
+                    {/* <Text style={styles.headerLabel}>Tổng quan</Text> */}
                     <TouchableOpacity style={styles.titleTouchable} onPress={() => setDatePickerVisible(true)}>
                         <Text style={styles.headerTitle}>
                             {loading ? 'Đang tải...' : (dynamicTitle || 'Tổng quan')}
@@ -513,7 +513,7 @@ const AdminStatisticsDashboard = () => {
                         />
 
                         {/* Thẻ thống kê CÁ NHÂN CỦA ADMIN */}
-                        {adminPersonalSummary.totalReports > 0 && (
+                        {/* {adminPersonalSummary.totalReports > 0 && (
                             <>
                                 <Text style={styles.sectionHeading}>Thống kê cá nhân của Admin</Text>
                                 <View style={styles.summaryCardsRow}>
@@ -527,7 +527,7 @@ const AdminStatisticsDashboard = () => {
                                     />
                                 </View>
                             </>
-                        )}
+                        )} */}
 
                         <View style={styles.leaderboardContainer}>
                             <Text style={styles.sectionTitle}>Hiệu suất Nhân viên</Text>
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
     subHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10, },
     headerLabel: { fontSize: 18, color: COLORS.secondary, marginBottom: 4, },
     titleTouchable: { flexDirection: 'row', alignItems: 'center' },
-    headerTitle: { fontSize: 24, fontWeight: 'bold', color: COLORS.primary, },
+    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.primary, },
     
     // Style mới cho hàng chứa 2 SummaryCard
     summaryCardsRow: {
@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: COLORS.primary,
         marginTop: 15,
-        marginBottom: 15,
+        marginBottom: 10,
         paddingHorizontal: 20 // Khoảng cách lề đồng nhất
     },
     noDataContainer: {

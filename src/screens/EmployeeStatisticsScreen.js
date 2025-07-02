@@ -447,7 +447,7 @@ const EmployeeStatisticsScreen = () => {
                             style={styles.reportItemImage}
                         />
                         <View style={styles.reportStatusIconOnImage}>
-                            <Ionicons name={statusInfo.icon} size={26} color={statusInfo.color} />
+                            <Ionicons name={statusInfo.icon} size={13} color={statusInfo.color} />
                         </View>
                     </View>
                     
