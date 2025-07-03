@@ -10,11 +10,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native'; 
 import { useAuth } from '../../src/context/AuthContext'; 
 
 import { useCommissionRates } from '../hooks/useCommissionRates'; 
 import LoadingOverlay from '../components/LoadingOverlay'; 
+import { Calendar, LocaleConfig } from 'react-native-calendars'; // Import Calendar
+
+LocaleConfig.locales['vi'] = { // Configure Vietnamese locale for Calendar
+    monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
+    monthNamesShort: ['Th.1','Th.2','Th.3','Th.4','Th.5','Th.6','Th.7','Th.8','Th.9','Th.10','Th.11','Th.12'],
+    dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'],
+    dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'],
+    today: 'Hôm nay'
+};
+LocaleConfig.defaultLocale = 'vi';
 
 const COLORS = {
     black: '#121212',
@@ -28,7 +38,6 @@ const COLORS = {
     overtime: '#6a0dad', 
 };
 
-// --- CÁC COMPONENT CON (Checkbox, RadioButton) ---
 const Checkbox = ({ label, value, isSelected, onSelect }) => (
     <TouchableOpacity style={styles.checkboxContainer} onPress={() => onSelect(value)}>
         <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
@@ -51,7 +60,6 @@ const RadioButton = ({ options, selectedOption, onSelect }) => (
     </View>
 );
 
-// --- CÁC HẰNG SỐ VÀ LỰA CHỌN (Không đổi) ---
 const CLOUDINARY_CLOUD_NAME = 'dq802xggt';
 const CLOUDINARY_UPLOAD_PRESET = 'suhii_app_preset';
 const SERVICE_OPTIONS = [
@@ -68,7 +76,7 @@ const PAYMENT_OPTIONS = [
 const CreateReportScreen = () => {
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
-    const { user, userRole, users } = useAuth(); // Lấy users từ AuthContext
+    const { user, users } = useAuth(); // Lấy users từ AuthContext
 
     const [price, setPrice] = useState('');
     const [rawPrice, setRawPrice] = useState('');
@@ -83,27 +91,25 @@ const CreateReportScreen = () => {
     const [isPartnerPickerModalVisible, setPartnerPickerModalVisible] = useState(false);
     const [tempPartner, setTempPartner] = useState(null);
 
-    // States cho người làm báo cáo hộ (chỉ admin)
-    const [selectedReportForEmployee, setSelectedReportForEmployee] = useState(null);
-    const [isReportForPickerModalVisible, setReportForPickerModalVisible] = useState(false);
-    const [tempReportForEmployee, setTempReportForEmployee] = useState(null);
-
+    // MỚI: Trạng thái cho checkbox "Làm ngoài giờ"
     const [isOvertime, setIsOvertime] = useState(false);
+
+    // MỚI: Trạng thái cho chọn ngày xuất hóa đơn
+    const [selectedReportDate, setSelectedReportDate] = useState(new Date()); // Mặc định là ngày hiện tại
+    const [isReportDatePickerVisible, setReportDatePickerVisible] = useState(false);
 
     const { defaultRevenuePercentage, overtimePercentage, isLoading: ratesLoading } = useCommissionRates(); 
 
     // Lọc danh sách nhân viên cho "Người làm cùng": Loại bỏ chính người dùng đang đăng nhập
     const availableEmployeesForPicker = (users || []).filter(u => u.id !== user?.uid); 
     
-    // Danh sách nhân viên cho "Làm hóa đơn hộ": Loại bỏ chính người dùng đang đăng nhập
-    // (Admin không thể làm hộ cho chính mình)
-    const allEmployeesForReportFor = (users || []).filter(u => u.id !== user?.uid); 
+    useEffect(() => {
+        const currentHour = new Date().getHours();
+        if (currentHour >= 22 || currentHour < 6) { // Ví dụ: từ 10 tối đến 6 sáng
+            setIsOvertime(true);
+        }
+    }, []);
 
-    // useEffect để mặc định chọn nhân viên đầu tiên cho "Làm hóa đơn hộ" đã bị loại bỏ
-    // để nó mặc định là null (Không chọn) như yêu cầu.
-
-
-    // --- CÁC HÀM XỬ LÝ ---
     const handleServiceSelection = (value) => { setSelectedServices((prev) => prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]); };
     const formatCurrency = (num) => { if (!num) return ''; let cleanNum = num.toString().replace(/[^0-9]/g, ''); return cleanNum.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
     const handlePriceChange = (text) => { const numericValue = text.replace(/[^0-9]/g, ''); setRawPrice(numericValue); setPrice(formatCurrency(numericValue)); };
@@ -178,28 +184,8 @@ const CreateReportScreen = () => {
             const currentUser = auth.currentUser;
             if (!currentUser) { throw new Error("Người dùng chưa đăng nhập."); }
 
-            // --- XÁC ĐỊNH NGƯỜI LÀM BÁO CÁO CHÍNH (userId) ---
-            let reportUserId = currentUser.uid;
-            let reportUserEmail = currentUser.email;
-            let reportEmployeeName = currentUser.displayName || currentUser.email.split('@')[0];
+            const currentEmployeeName = currentUser.displayName || currentUser.email.split('@')[0];
             
-            // Trường để lưu thông tin admin nếu họ làm hộ
-            let adminMadeForId = null; 
-            let adminMadeForName = null; 
-
-            // Nếu admin làm hóa đơn hộ cho nhân viên khác (selectedReportForEmployee có giá trị)
-            if (userRole === 'admin' && selectedReportForEmployee) {
-                const employeeMadeFor = (users || []).find(u => u.id === selectedReportForEmployee); 
-                if (employeeMadeFor) {
-                    reportUserId = employeeMadeFor.id; // UserId của báo cáo là nhân viên được admin chọn
-                    reportUserEmail = employeeMadeFor.email;
-                    reportEmployeeName = employeeMadeFor.displayName || employeeMadeFor.email.split('@')[0];
-                    
-                    adminMadeForId = currentUser.uid; // ID của admin làm hộ
-                    adminMadeForName = currentUser.displayName || currentUser.email.split('@')[0]; // Tên của admin làm hộ
-                }
-            }
-
             let partnerName = null;
             if (selectedPartner) {
                 const partner = (users || []).find(e => e.id === selectedPartner); 
@@ -208,54 +194,38 @@ const CreateReportScreen = () => {
                 }
             }
             
-            // --- XÁC ĐỊNH DANH SÁCH NGƯỜI THAM GIA (participantIds) ---
             const uniqueParticipantIds = new Set();
-            
-            // 1. Thêm người làm báo cáo chính (hoặc người được admin làm hộ)
-            if (reportUserId) {
-                uniqueParticipantIds.add(reportUserId);
-            }
-            // 2. Thêm người làm cùng (nếu có và không trùng với người làm báo cáo chính)
-            if (selectedPartner && selectedPartner !== reportUserId) { 
+            uniqueParticipantIds.add(currentUser.uid);
+            if (selectedPartner && selectedPartner !== currentUser.uid) { 
                 uniqueParticipantIds.add(selectedPartner);
             }
-            // 3. Thêm admin vào participantIds CHỈ KHI họ là người làm hộ VÀ KHÔNG phải là người làm báo cáo chính hay người làm cùng
-            if (adminMadeForId && !uniqueParticipantIds.has(adminMadeForId)) {
-                uniqueParticipantIds.add(adminMadeForId);
-            }
-            
-            // Chuyển Set về Array
             const finalParticipantIds = Array.from(uniqueParticipantIds);
-
-            const reportStatus = userRole === 'admin' ? 'approved' : 'pending'; 
 
             const currentRevenuePercentage = defaultRevenuePercentage;
             const currentOvertimePercentage = overtimePercentage;
 
+            // Sử dụng selectedReportDate cho createdAt
             const reportData = {
-                userId: reportUserId, // ID của nhân viên làm báo cáo (hoặc người được admin làm hộ)
-                userEmail: reportUserEmail,
-                employeeName: reportEmployeeName,
+                userId: currentUser.uid, 
+                userEmail: currentUser.email,
+                employeeName: currentEmployeeName,
                 price: numericPrice,
                 service: selectedServices.join(', '),
                 note: note.trim(),
                 paymentMethod: paymentMethod,
                 imageUrl: imageUrl,
-                createdAt: serverTimestamp(),
-                status: reportStatus,
+                createdAt: selectedReportDate ? new Date(selectedReportDate) : serverTimestamp(), // Sử dụng ngày đã chọn
+                status: 'pending', // Luôn là pending
                 isOvertime: isOvertime,
                 partnerId: selectedPartner || null,
                 partnerName: partnerName,
                 participantIds: finalParticipantIds, 
                 commissionRate: currentRevenuePercentage / 100, 
                 overtimeRate: currentOvertimePercentage / 100, 
-                // Thêm thông tin nếu admin làm hộ
-                adminMadeForId: adminMadeForId,
-                adminMadeForName: adminMadeForName,
             };
 
             await addDoc(collection(db, 'reports'), reportData);
-            Alert.alert('Thành công', `Hóa đơn đã được tạo và ${userRole === 'admin' ? 'đã duyệt' : 'gửi đi chờ duyệt'}!`); 
+            Alert.alert('Thành công', 'Hóa đơn đã được tạo và gửi đi chờ duyệt!'); 
 
             // Reset form
             setPrice('');
@@ -267,9 +237,7 @@ const CreateReportScreen = () => {
             setSelectedPartner(null);
             setTempPartner(null);
             setIsOvertime(false); 
-            // Luôn reset selectedReportForEmployee về null để mặc định là "Không chọn"
-            setSelectedReportForEmployee(null); 
-            setTempReportForEmployee(null);
+            setSelectedReportDate(new Date()); // Reset ngày về hiện tại
             
             navigation.goBack();
         } catch (error) {
@@ -280,18 +248,43 @@ const CreateReportScreen = () => {
         }
     };
 
-    // Hàm mở Modal cho Picker Người làm cùng
     const openPartnerPickerModal = () => { setTempPartner(selectedPartner); setPartnerPickerModalVisible(true); };
     const confirmPartnerSelection = () => { setSelectedPartner(tempPartner); setPartnerPickerModalVisible(false); };
 
-    // Hàm mở Modal cho Picker Người làm báo cáo hộ (Admin Only)
-    const openReportForPickerModal = () => { setTempReportForEmployee(selectedReportForEmployee); setReportForPickerModalVisible(true); };
-    const confirmReportForSelection = () => { setSelectedReportForEmployee(tempReportForEmployee); setReportForPickerModalVisible(false); };
+    // Hàm mở Modal chọn ngày
+    const openReportDatePicker = () => {
+        setReportDatePickerVisible(true);
+    };
+
+    // Hàm xử lý chọn ngày từ Calendar
+    const onDaySelect = (day) => {
+        const newDate = new Date(day.dateString);
+        setSelectedReportDate(newDate);
+        setReportDatePickerVisible(false);
+    };
+
+    // Định dạng ngày hiển thị
+    const getFormattedReportDate = (date) => {
+        if (!date) return 'Chọn ngày';
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const dateToCompare = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+        if (dateToCompare.getTime() === today.getTime()) return 'Hôm nay';
+        return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+    };
+
+    // Hàm để lấy ngày được chọn ở định dạng YYYY-MM-DD cho Calendar
+    const toYYYYMMDD = (date) => {
+        if (!date) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
 
 
     const partnerDisplayName = selectedPartner ? (users.find(e => e.id === selectedPartner)?.displayName || users.find(e => e.id === selectedPartner)?.email?.split('@')[0] || 'Không rõ') : '-- Không chọn --';
-    // Hiển thị tên của người được làm hộ, hoặc '-- Không chọn --' nếu chưa chọn
-    const reportForEmployeeDisplayName = selectedReportForEmployee ? (users.find(e => e.id === selectedReportForEmployee)?.displayName || users.find(e => e.id === selectedReportForEmployee)?.email?.split('@')[0] || 'Không rõ') : '-- Không chọn --';
 
     return (
         <View style={styles.fullScreenContainer}>
@@ -304,44 +297,83 @@ const CreateReportScreen = () => {
                 <View style={styles.headerRightPlaceholder} />
             </View>
 
-            {/* Sử dụng LoadingOverlay cho cả ratesLoading và uploading */}
             <LoadingOverlay 
                 isVisible={ratesLoading || uploading} 
                 message={ratesLoading ? "Đang tải cài đặt doanh thu..." : "Đang xử lý..."} 
             />
-
-            {/* Modal cho Picker Người làm báo cáo hộ (Admin Only) */}
-            {userRole === 'admin' && (
-                <Modal transparent={true} visible={isReportForPickerModalVisible} animationType="slide" onRequestClose={() => setReportForPickerModalVisible(false)}>
-                    <TouchableWithoutFeedback onPress={() => setReportForPickerModalVisible(false)}>
-                        <View style={styles.modalOverlay}>
-                            <TouchableWithoutFeedback> 
-                                <View style={styles.modalContent}>
-                                    <Text style={styles.modalTitle}>Làm hóa đơn hộ cho nhân viên</Text>
-                                    <View style={styles.pickerWrapper}>
-                                        <Picker
-                                            selectedValue={tempReportForEmployee}
-                                            onValueChange={(itemValue) => setTempReportForEmployee(itemValue)}
-                                            itemStyle={styles.pickerItemText}
-                                        >
-                                            {/* Mặc định là "Không chọn" */}
-                                            <Picker.Item label="-- Không chọn --" value={null} /> 
-                                            {allEmployeesForReportFor.map(employee => (
-                                                <Picker.Item key={employee.id} label={employee.displayName || employee.email.split('@')[0]} value={employee.id} />
-                                            ))}
-                                        </Picker>
-                                    </View>
-                                    <TouchableOpacity style={styles.modalDoneButton} onPress={confirmReportForSelection}>
-                                        <Text style={styles.modalDoneButtonText}>Chọn</Text>
-                                    </TouchableOpacity>
+            
+            {/* Modal cho Picker Người làm cùng */}
+            <Modal transparent={true} visible={isPartnerPickerModalVisible} animationType="slide" onRequestClose={() => setPartnerPickerModalVisible(false)}>
+                <TouchableWithoutFeedback onPress={() => setPartnerPickerModalVisible(false)}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.modalContent}>
+                                <Text style={styles.modalTitle}>Chọn người làm cùng</Text>
+                                <View style={styles.pickerWrapper}>
+                                    <Picker
+                                        selectedValue={tempPartner}
+                                        onValueChange={(itemValue) => setTempPartner(itemValue)}
+                                        itemStyle={styles.pickerItemText}
+                                    >
+                                        <Picker.Item label="-- Không chọn --" value={null} />
+                                        {availableEmployeesForPicker.map(employee => (
+                                            <Picker.Item key={employee.id} label={employee.displayName || employee.email.split('@')[0]} value={employee.id} />
+                                        ))}
+                                    </Picker>
                                 </View>
-                            </TouchableWithoutFeedback> 
-                        </View>
-                    </TouchableWithoutFeedback>
-                </Modal>
-            )}
+                                <TouchableOpacity style={styles.modalDoneButton} onPress={confirmPartnerSelection}>
+                                    <Text style={styles.modalDoneButtonText}>Chọn</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* MỚI: Modal chọn ngày xuất hóa đơn */}
+            <Modal
+                transparent={true}
+                animationType="fade"
+                visible={isReportDatePickerVisible}
+                onRequestClose={() => setReportDatePickerVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setReportDatePickerVisible(false)}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.modalContent}>
+                                <Text style={styles.modalTitle}>Chọn Ngày Xuất Hóa Đơn</Text>
+                                <Calendar
+                                    onDayPress={onDaySelect}
+                                    markedDates={{
+                                        [toYYYYMMDD(selectedReportDate)]: {
+                                            selected: true,
+                                            disableTouchEvent: true,
+                                            selectedColor: COLORS.primary
+                                        }
+                                    }}
+                                    current={toYYYYMMDD(selectedReportDate)} // Hiển thị tháng của ngày đang chọn
+                                />
+                                <TouchableOpacity
+                                    style={styles.modalDoneButton}
+                                    onPress={() => setReportDatePickerVisible(false)}
+                                >
+                                    <Text style={styles.modalDoneButtonText}>Xác nhận</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
 
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+                <View style={styles.card}>
+                    <Text style={styles.label}>Ngày xuất hóa đơn</Text>
+                    <TouchableOpacity style={styles.pickerButton} onPress={openReportDatePicker}>
+                        <Text style={styles.pickerButtonText}>{getFormattedReportDate(selectedReportDate)}</Text>
+                        <Ionicons name="calendar-outline" size={20} color={COLORS.gray} />
+                    </TouchableOpacity>
+                </View>
+
                 <View style={styles.card}>
                     <Text style={styles.label}>Giá tiền (VNĐ)</Text>
                     <TextInput
@@ -366,7 +398,6 @@ const CreateReportScreen = () => {
                     ))}
                 </View>
 
-                {/* Checkbox "Làm ngoài giờ" */}
                 <View style={styles.card}>
                     <Text style={styles.label}>Trạng thái khác</Text>
                     <Checkbox
@@ -378,50 +409,12 @@ const CreateReportScreen = () => {
                 </View>
 
                 <View style={styles.card}>
-                    <Text style={styles.label}>Người làm cùng</Text>
+                    <Text style={styles.label}>Người làm cùng (tùy chọn)</Text>
                     <TouchableOpacity style={styles.pickerButton} onPress={openPartnerPickerModal}>
                         <Text style={styles.pickerButtonText}>{partnerDisplayName}</Text>
                         <Ionicons name="chevron-down" size={20} color={COLORS.gray} />
                     </TouchableOpacity>
                 </View>
-
-                {userRole === 'admin' && (
-                    <View style={styles.card}>
-                        <Text style={styles.label}>Làm hóa đơn hộ cho</Text>
-                        <TouchableOpacity style={styles.pickerButton} onPress={openReportForPickerModal}>
-                            <Text style={styles.pickerButtonText}>{reportForEmployeeDisplayName}</Text>
-                            <Ionicons name="chevron-down" size={20} color={COLORS.gray} />
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                {/* Modal cho Picker Người làm cùng */}
-                <Modal transparent={true} visible={isPartnerPickerModalVisible} animationType="slide" onRequestClose={() => setPartnerPickerModalVisible(false)}>
-                    <TouchableWithoutFeedback onPress={() => setPartnerPickerModalVisible(false)}>
-                        <View style={styles.modalOverlay}>
-                            <TouchableWithoutFeedback>
-                                <View style={styles.modalContent}>
-                                    <Text style={styles.modalTitle}>Chọn người làm cùng</Text>
-                                    <View style={styles.pickerWrapper}>
-                                        <Picker
-                                            selectedValue={tempPartner}
-                                            onValueChange={(itemValue) => setTempPartner(itemValue)}
-                                            itemStyle={styles.pickerItemText}
-                                        >
-                                            <Picker.Item label="-- Không chọn --" value={null} />
-                                            {availableEmployeesForPicker.map(employee => (
-                                                <Picker.Item key={employee.id} label={employee.displayName || employee.email.split('@')[0]} value={employee.id} />
-                                            ))}
-                                        </Picker>
-                                    </View>
-                                    <TouchableOpacity style={styles.modalDoneButton} onPress={confirmPartnerSelection}>
-                                        <Text style={styles.modalDoneButtonText}>Chọn</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </TouchableWithoutFeedback>
-                        </View>
-                    </TouchableWithoutFeedback>
-                </Modal>
 
                 <View style={styles.card}>
                     <Text style={styles.label}>Ghi chú (tùy chọn)</Text>
@@ -571,4 +564,4 @@ const styles = StyleSheet.create({
     pickerItemText: { color: COLORS.black, fontSize: 18 },
 });
 
-export default CreateReportScreen;
+export default CreateReportScreen; 

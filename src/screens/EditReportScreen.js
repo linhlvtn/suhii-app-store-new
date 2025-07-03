@@ -1,30 +1,39 @@
 // src/screens/EditReportScreen.js
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, Platform, TouchableWithoutFeedback } from 'react-native'; // Xóa ActivityIndicator
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, Platform, TouchableWithoutFeedback } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
-import { db, auth } from '../../firebaseConfig'; 
-import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs as getFirestoreDocs } from 'firebase/firestore'; 
+import { db, auth } from '../../firebaseConfig';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs as getFirestoreDocs, Timestamp } from 'firebase/firestore'; // Import Timestamp
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { useRoute, useNavigation } from '@react-navigation/native'; 
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
-// import LottieView from 'lottie-react-native'; // <-- XÓA DÒNG NÀY HOẶC ĐẢM BẢO NÓ ĐƯỢC COMMENT
+import { Calendar, LocaleConfig } from 'react-native-calendars'; // Import Calendar and LocaleConfig
 
-import LoadingOverlay from '../components/LoadingOverlay'; // <-- THÊM DÒNG NÀY
+import LoadingOverlay from '../components/LoadingOverlay';
+
+LocaleConfig.locales['vi'] = { // Configure Vietnamese locale for Calendar
+    monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
+    monthNamesShort: ['Th.1','Th.2','Th.3','Th.4','Th.5','Th.6','Th.7','Th.8','Th.9','Th.10','Th.11','Th.12'],
+    dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'],
+    dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'],
+    today: 'Hôm nay'
+};
+LocaleConfig.defaultLocale = 'vi';
 
 const COLORS = {
     black: '#121212',
     white: '#FFFFFF',
     gray: '#888888',
     lightGray: '#F5F5F5',
-    primary: '#121212', 
+    primary: '#121212',
     pending: '#f39c12',
     approved: '#28a745',
     rejected: '#D32F2F',
-    overtime: '#6a0dad', 
+    overtime: '#6a0dad',
 };
 
 // --- CÁC COMPONENT CON (Checkbox, RadioButton) ---
@@ -95,7 +104,11 @@ const EditReportScreen = () => {
     const [loadingUsers, setLoadingUsers] = useState(true);
     const [selectedPartnerId, setSelectedPartnerId] = useState(null);
     const [isPartnerPickerVisible, setPartnerPickerVisible] = useState(false);
-    const [tempPartner, setTempPartner] = useState(null); 
+    const [tempPartner, setTempPartner] = useState(null);
+
+    // MỚI: State cho ngày xuất hóa đơn
+    const [selectedReportDate, setSelectedReportDate] = useState(new Date()); // Mặc định là ngày hiện tại
+    const [isReportDatePickerVisible, setReportDatePickerVisible] = useState(false);
 
     useEffect(() => {
         const fetchReportAndUsers = async () => {
@@ -108,7 +121,7 @@ const EditReportScreen = () => {
                     const data = docSnap.data();
                     setRawPrice(String(data.price || 0));
                     setPrice(formatCurrency(String(data.price || 0)));
-                    
+
                     if (Array.isArray(data.service)) {
                         setSelectedServices(data.service);
                     } else if (typeof data.service === 'string' && data.service.length > 0) {
@@ -122,7 +135,15 @@ const EditReportScreen = () => {
                     setOriginalImageUrl(data.imageUrl || null);
                     setIsOvertime(data.isOvertime || false);
                     setSelectedPartnerId(data.partnerId || null);
-                    setTempPartner(data.partnerId || null); 
+                    setTempPartner(data.partnerId || null);
+                    
+                    // MỚI: Lấy ngày tạo từ báo cáo và gán vào state
+                    if (data.createdAt && data.createdAt.toDate) {
+                        setSelectedReportDate(data.createdAt.toDate());
+                    } else {
+                        setSelectedReportDate(new Date()); // Mặc định là ngày hiện tại nếu không có
+                    }
+
                 } else {
                     Alert.alert("Lỗi", "Không tìm thấy hóa đơn.");
                     navigation.goBack();
@@ -250,7 +271,7 @@ const EditReportScreen = () => {
                 }
             }
         }
-        
+
         try {
             const reportRef = doc(db, 'reports', reportId);
 
@@ -271,7 +292,6 @@ const EditReportScreen = () => {
                 participantIds.push(selectedPartnerId);
             }
 
-
             await updateDoc(reportRef, {
                 price: numericPrice,
                 service: selectedServices.join(', '),
@@ -279,6 +299,7 @@ const EditReportScreen = () => {
                 paymentMethod: paymentMethod,
                 imageUrl: finalImageUrl,
                 updatedAt: serverTimestamp(),
+                createdAt: Timestamp.fromDate(selectedReportDate), // MỚI: Cập nhật ngày xuất hóa đơn
                 isOvertime: isOvertime,
                 partnerId: selectedPartnerId || null,
                 partnerName: partnerName,
@@ -300,6 +321,39 @@ const EditReportScreen = () => {
 
     const partnerDisplayName = selectedPartnerId ? (users.find(u => u.id === selectedPartnerId)?.displayName || 'Không rõ') : '-- Không chọn --';
 
+    // MỚI: Hàm mở Modal chọn ngày
+    const openReportDatePicker = () => {
+        setReportDatePickerVisible(true);
+    };
+
+    // MỚI: Hàm xử lý chọn ngày từ Calendar
+    const onDaySelect = (day) => {
+        const newDate = new Date(day.dateString);
+        setSelectedReportDate(newDate);
+        setReportDatePickerVisible(false);
+    };
+
+    // MỚI: Định dạng ngày hiển thị
+    const getFormattedReportDate = (date) => {
+        if (!date) return 'Chọn ngày';
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const dateToCompare = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+        if (dateToCompare.getTime() === today.getTime()) return 'Hôm nay';
+        return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+    };
+
+    // MỚI: Hàm để lấy ngày được chọn ở định dạng YYYY-MM-DD cho Calendar
+    const toYYYYMMDD = (date) => {
+        if (!date) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+
     return (
         <View style={[styles.fullScreenContainer]}>
             <StatusBar style="dark" />
@@ -312,9 +366,9 @@ const EditReportScreen = () => {
             </View>
 
             {/* Sử dụng LoadingOverlay cho cả isFetchingData và uploading */}
-            <LoadingOverlay 
-                isVisible={isFetchingData || uploading} 
-                message={isFetchingData ? "Đang tải dữ liệu..." : "Đang cập nhật..."} 
+            <LoadingOverlay
+                isVisible={isFetchingData || uploading}
+                message={isFetchingData ? "Đang tải dữ liệu..." : "Đang cập nhật..."}
             />
 
             {/* Modal cho Picker Người làm cùng */}
@@ -345,7 +399,51 @@ const EditReportScreen = () => {
                 </TouchableWithoutFeedback>
             </Modal>
 
+            {/* MỚI: Modal chọn ngày xuất hóa đơn */}
+            <Modal
+                transparent={true}
+                animationType="fade"
+                visible={isReportDatePickerVisible}
+                onRequestClose={() => setReportDatePickerVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setReportDatePickerVisible(false)}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.modalContent}>
+                                <Text style={styles.modalTitle}>Chọn Ngày Xuất Hóa Đơn</Text>
+                                <Calendar
+                                    onDayPress={onDaySelect}
+                                    markedDates={{
+                                        [toYYYYMMDD(selectedReportDate)]: {
+                                            selected: true,
+                                            disableTouchEvent: true,
+                                            selectedColor: COLORS.primary
+                                        }
+                                    }}
+                                    current={toYYYYMMDD(selectedReportDate)} // Hiển thị tháng của ngày đang chọn
+                                />
+                                <TouchableOpacity
+                                    style={styles.modalDoneButton}
+                                    onPress={() => setReportDatePickerVisible(false)}
+                                >
+                                    <Text style={styles.modalDoneButtonText}>Xác nhận</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+                {/* MỚI: Trường chọn ngày xuất hóa đơn */}
+                <View style={styles.card}>
+                    <Text style={styles.label}>Ngày xuất hóa đơn</Text>
+                    <TouchableOpacity style={styles.pickerButton} onPress={openReportDatePicker}>
+                        <Text style={styles.pickerButtonText}>{getFormattedReportDate(selectedReportDate)}</Text>
+                        <Ionicons name="calendar-outline" size={20} color={COLORS.gray} />
+                    </TouchableOpacity>
+                </View>
+
                 <View style={styles.card}>
                     <Text style={styles.label}>Giá tiền (VNĐ)</Text>
                     <TextInput
@@ -386,7 +484,6 @@ const EditReportScreen = () => {
                 <View style={styles.card}>
                     <Text style={styles.label}>Người làm cùng (Tùy chọn)</Text>
                     {loadingUsers ? (
-                        // Có thể hiển thị ActivityIndicator nhỏ ở đây nếu muốn, hoặc để LoadingOverlay chính xử lý
                         <Text style={styles.pickerButtonText}>Đang tải người dùng...</Text>
                     ) : (
                         <TouchableOpacity
@@ -455,7 +552,6 @@ const EditReportScreen = () => {
 
 const styles = StyleSheet.create({
     fullScreenContainer: { flex: 1, backgroundColor: COLORS.lightGray },
-    // loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.lightGray }, // Xóa hoặc sửa đổi
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -513,8 +609,6 @@ const styles = StyleSheet.create({
     },
     submitButtonDisabled: { backgroundColor: COLORS.gray },
     submitButtonText: { color: COLORS.white, fontSize: 18, fontWeight: 'bold' },
-    // modalBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.6)' }, // Sẽ được quản lý bởi LoadingOverlay
-    // loadingText: { color: COLORS.white, marginTop: 15, fontSize: 16 }, // Sẽ được quản lý bởi LoadingOverlay
 
     // Checkbox & Radio Styles
     checkboxGroup: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
@@ -556,39 +650,6 @@ const styles = StyleSheet.create({
     modalDoneButton: { backgroundColor: COLORS.primary, borderRadius: 10, padding: 15, alignItems: 'center' },
     modalDoneButtonText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
     pickerItemText: { color: COLORS.black, fontSize: 18 },
-
-    // Xóa/Sửa đổi các styles liên quan đến loading overlay toàn bộ và lottie cũ
-    // loadingOverlayContainer: { // Style cho màn hình loading overlay toàn bộ
-    //     flex: 1,
-    //     justifyContent: 'center',
-    //     alignItems: 'center',
-    //     backgroundColor: COLORS.lightGray, // Màu nền của loading screen
-    // },
-    // loadingOverlayLottie: {
-    //     width: 150, // Kích thước của animation
-    //     height: 150,
-    // },
-    // loadingOverlayText: {
-    //     marginTop: 10,
-    //     fontSize: 16,
-    //     color: COLORS.secondary,
-    // },
-    // // Đối với modal loading khi submit
-    // modalBackground: { // Đã comment ở trên
-    //     flex: 1,
-    //     alignItems: 'center',
-    //     justifyContent: 'center',
-    //     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    // },
-    // modalLottie: { // Style cho lottie trong modal
-    //     width: 100, // Nhỏ hơn một chút so với full screen loading
-    //     height: 100,
-    // },
-    // modalLoadingText: { // Style cho text loading trong modal
-    //     color: COLORS.white,
-    //     marginTop: 15,
-    //     fontSize: 16,
-    // },
 });
 
 export default EditReportScreen;
