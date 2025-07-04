@@ -7,20 +7,18 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useIsFocused } from '@react-navigation/native';
-import moment from 'moment';
-import 'moment/locale/vi'; // Import tiếng Việt
-moment.locale('vi');
 
-// Import các component thống kê
-import SummaryCard from '../screens/Statistics/components/SummaryCard';
-import TimeFilterSegment from '../screens/Statistics/components/TimeFilterSegment';
-import StatsChart from '../screens/Statistics/components/StatsChart';
-import ServicePieChart from '../screens/Statistics/components/ServicePieChart';
-import RankItem from '../screens/Statistics/components/RankItem';
-// import LoadingOverlay from '../components/LoadingOverlay'; // <-- ĐÃ LOẠI BỎ IMPORT NÀY
+import TimeFilterSegment from './Statistics/components/TimeFilterSegment';
+import SummaryCard from './Statistics/components/SummaryCard';
+import StatsChart from './Statistics/components/StatsChart';
+import ServicePieChart from './Statistics/components/ServicePieChart';
 import { Picker } from '@react-native-picker/picker'; // Import Picker
+// import LottieView from 'lottie-react-native'; // Loại bỏ LottieView
+
+// Import moment (nếu chưa có)
+import moment from 'moment';
+import 'moment/locale/vi'; 
+moment.locale('vi');
 
 LocaleConfig.locales['vi'] = { monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'], dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'], today: 'Hôm nay' };
 LocaleConfig.defaultLocale = 'vi';
@@ -144,7 +142,6 @@ const initializeDailyData = (startDate, endDate, period) => {
     }
     return data;
 };
-
 
 const EmployeeStatisticsScreen = () => {
     const { userRole, user: authUser, users } = useAuth(); 
@@ -468,11 +465,12 @@ const EmployeeStatisticsScreen = () => {
                             )}
                         </View>
                         
-                        {actualReceivedRevenueText ? (
+                        {/* MỚI: Chỉ hiển thị doanh thu thực nhận cho admin */}
+                        {actualReceivedRevenueText && userRole === 'admin' ? (
                             <View style={styles.reportInfoRow}>
                                 <Ionicons name="cash" size={16} color={COLORS.success} />
                                 <Text style={styles.reportActualRevenueText}>
-                                    {actualReceivedRevenueText}₫
+                                    {actualReceivedRevenueText}
                                 </Text>
                             </View>
                         ) : null}
@@ -496,7 +494,7 @@ const EmployeeStatisticsScreen = () => {
                 </View>
             </TouchableWithoutFeedback>
         );
-    }, [employeeId]); 
+    }, [employeeId, userRole]); 
 
     return (
         <View style={styles.container}>
@@ -615,18 +613,6 @@ const EmployeeStatisticsScreen = () => {
                         />
                         <ServicePieChart data={pieChartData} title="Tỷ lệ dịch vụ theo cá nhân" style={styles.chartCardMargin} />
 
-                        {/* {employeeRankings.length > 0 && (
-                            <View style={styles.card}>
-                                <Text style={styles.cardTitle}>Xếp hạng nhân viên (theo hoa hồng)</Text>
-                                {employeeRankings.map((employee, index) => (
-                                    <TouchableOpacity key={employee.id || index} onPress={() => navigation.navigate('EmployeeStatistics', { employeeId: employee.id, employeeName: employee.name })}>
-                                        <RankItem item={{name: employee.name, revenue: employee.commission, clients: 0}} index={index} />
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        )} */}
-
-
                         {reports.length > 0 ? (
                             <View style={styles.reportsListSection}>
                                 <Text style={styles.reportsListTitle}>Danh sách hóa đơn trong kỳ</Text>
@@ -656,33 +642,6 @@ const EmployeeStatisticsScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.lightGray },
-    // Loại bỏ lottieContainer và lottieSpinner nếu không dùng Lottie
-    // loadingContainer và loadingText sẽ được thay thế bằng simpleLoadingContainer và simpleLoadingText
-    screenTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: COLORS.black,
-        marginVertical: 20,
-        textAlign: 'center',
-    },
-    card: {
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        padding: 16,
-        marginHorizontal: 15,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 2,
-        boxSizing: 'border-box',
-    },
-    cardTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.black,
-        marginBottom: 10,
-    },
     header: { 
         flexDirection: 'row', 
         alignItems: 'center', 
@@ -703,6 +662,11 @@ const styles = StyleSheet.create({
     timeFilterSegmentMargin: { marginHorizontal: 20, marginBottom: 15 },
     titleTouchable: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
     subHeaderTitle: { fontSize: 18, fontWeight: '600', color: COLORS.secondary },
+    // Loại bỏ lottieContainer, lottieSpinner, và loadingText cũ nếu chúng chỉ dành cho Lottie
+    // loadingContainer: { height: 400, justifyContent: 'center', alignItems: 'center' },
+    // lottieSpinner: { width: 150, height: 150 },
+    // loadingText: { marginTop: 0, fontSize: 16, color: COLORS.secondary },
+
     datePickerBackdrop: { 
         flex: 1, 
         justifyContent: 'center', 
@@ -724,7 +688,7 @@ const styles = StyleSheet.create({
     },
     summaryCardWrapper: {
         marginHorizontal: 20,
-        marginBottom: 0,
+        marginBottom: 10,
     },
     reportsListSection: {
         backgroundColor: COLORS.white,
@@ -849,9 +813,8 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        height: 200, // Chiều cao hợp lý để loading spinner hiển thị
+        height: 200, 
         marginTop: 50,
-        // Không cần background overlay vì ActivityIndicator không full màn hình
     },
     simpleLoadingText: {
         marginTop: 10,

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, Platform, TouchableWithoutFeedback } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { db, auth } from '../../firebaseConfig'; 
 import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
@@ -91,8 +91,8 @@ const CreateReportScreen = () => {
     const [isPartnerPickerModalVisible, setPartnerPickerModalVisible] = useState(false);
     const [tempPartner, setTempPartner] = useState(null);
 
-    // MỚI: Trạng thái cho checkbox "Làm ngoài giờ"
-    const [isOvertime, setIsOvertime] = useState(false);
+    // THAY ĐỔI: Mặc định không chọn "Làm ngoài giờ" và loại bỏ useEffect tự động kiểm tra
+    const [isOvertime, setIsOvertime] = useState(false); 
 
     // MỚI: Trạng thái cho chọn ngày xuất hóa đơn
     const [selectedReportDate, setSelectedReportDate] = useState(new Date()); // Mặc định là ngày hiện tại
@@ -103,12 +103,13 @@ const CreateReportScreen = () => {
     // Lọc danh sách nhân viên cho "Người làm cùng": Loại bỏ chính người dùng đang đăng nhập
     const availableEmployeesForPicker = (users || []).filter(u => u.id !== user?.uid); 
     
-    useEffect(() => {
-        const currentHour = new Date().getHours();
-        if (currentHour >= 22 || currentHour < 6) { // Ví dụ: từ 10 tối đến 6 sáng
-            setIsOvertime(true);
-        }
-    }, []);
+    // ĐÃ LOẠI BỎ: useEffect tự động chọn "Làm ngoài giờ" theo thời gian
+    // useEffect(() => {
+    //     const currentHour = new Date().getHours();
+    //     if (currentHour >= 22 || currentHour < 6) { // Ví dụ: từ 10 tối đến 6 sáng
+    //         setIsOvertime(true);
+    //     }
+    // }, []);
 
     const handleServiceSelection = (value) => { setSelectedServices((prev) => prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]); };
     const formatCurrency = (num) => { if (!num) return ''; let cleanNum = num.toString().replace(/[^0-9]/g, ''); return cleanNum.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
@@ -564,4 +565,4 @@ const styles = StyleSheet.create({
     pickerItemText: { color: COLORS.black, fontSize: 18 },
 });
 
-export default CreateReportScreen; 
+export default CreateReportScreen;
