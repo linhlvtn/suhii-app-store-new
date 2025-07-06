@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
+import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
@@ -12,7 +13,6 @@ import TimeFilterSegment from './Statistics/components/TimeFilterSegment';
 import SummaryCard from './Statistics/components/SummaryCard';
 import StatsChart from './Statistics/components/StatsChart';
 import ServicePieChart from './Statistics/components/ServicePieChart';
-import { Picker } from '@react-native-picker/picker'; // Import Picker
 // import LottieView from 'lottie-react-native'; // Loại bỏ LottieView
 
 // Import moment (nếu chưa có)

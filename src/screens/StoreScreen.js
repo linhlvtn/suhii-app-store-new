@@ -449,9 +449,6 @@ const StoreScreen = () => {
                                 <Text style={styles.sharedPriceText}>
                                     {(item.price || 0).toLocaleString('vi-VN')}₫
                                 </Text>
-                                {item.isOvertime && (
-                                    <Text style={styles.overtimeText}>{`(+${displayOvertimeRate}%)`}</Text>
-                                )}
                                 {/* <-- BỔ SUNG HIỂN THỊ PHƯƠNG THỨC THANH TOÁN --> */}
                                 {item.paymentMethod && (
                                     <Text style={styles.paymentMethodText}>
@@ -467,6 +464,9 @@ const StoreScreen = () => {
                                 <View style={styles.infoRow}>
                                     <Ionicons name="cash" size={16} color={COLORS.approved} />
                                     <Text style={styles.infoText}>Thực nhận: {actualReceivedRevenueText}₫</Text>
+                                    {item.isOvertime && (
+                                        <Text style={styles.overtimeText}>{`(+${displayOvertimeRate}%)`}</Text>
+                                    )}
                                 </View>
                             ) : null}
 
@@ -538,8 +538,6 @@ const StoreScreen = () => {
                         {todayRevenue.toLocaleString('vi-VN')}₫
                     </Text>
                 </View>
-
-                
                 <View style={styles.headerRightContainer}>
                     <HeaderLogoutButton />
                 </View>
@@ -712,7 +710,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: COLORS.black,
     },
-    headerLogo: { width: 45, height: 40, borderRadius: 8, backgroundColor: '#000', padding: 2, marginRight: 6 },
+    headerLogo: { width: 50, height: 40, borderRadius: 6 },
     headerRightContainer: { flexDirection: 'row', alignItems: 'center', width: 100, justifyContent: 'flex-end' },
     headerButton: { width: 45, height: 45, justifyContent: 'center', alignItems: 'center' },
     filterBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, backgroundColor: COLORS.lightGray, borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
@@ -749,7 +747,7 @@ const styles = StyleSheet.create({
         color: COLORS.secondary,
         marginTop: 2,
     },
-    overtimeText: { marginLeft: 4, fontSize: 12, fontWeight: '700', color: COLORS.green },
+    overtimeText: { marginLeft: 8, fontSize: 12, fontWeight: '700' },
     infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
     infoText: { marginLeft: 8, fontSize: 13, color: COLORS.green, flexShrink: 1 },
     infoTextAuth: { marginLeft: 8, fontSize: 13, color: COLORS.gray, flexShrink: 1 },

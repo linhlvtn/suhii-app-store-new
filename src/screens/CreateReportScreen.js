@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Modal, Platform, TouchableWithoutFeedback } from 'react-native';
-import ImagePicker from 'expo-image-picker';
+import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { db, auth } from '../../firebaseConfig'; 
 import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { useNavigation } from '@react-navigation/native'; 
-import { useAuth } from '../../src/context/AuthContext'; 
+import { useAuth } from '../../src/context/AuthContext'; // Import useAuth để lấy userRole
 
 import { useCommissionRates } from '../hooks/useCommissionRates'; 
 import LoadingOverlay from '../components/LoadingOverlay'; 
@@ -76,7 +76,7 @@ const PAYMENT_OPTIONS = [
 const CreateReportScreen = () => {
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
-    const { user, users } = useAuth(); // Lấy users từ AuthContext
+    const { user, users, userRole } = useAuth(); // Lấy user, users VÀ userRole từ AuthContext
 
     const [price, setPrice] = useState('');
     const [rawPrice, setRawPrice] = useState('');
@@ -91,7 +91,7 @@ const CreateReportScreen = () => {
     const [isPartnerPickerModalVisible, setPartnerPickerModalVisible] = useState(false);
     const [tempPartner, setTempPartner] = useState(null);
 
-    // THAY ĐỔI: Mặc định không chọn "Làm ngoài giờ" và loại bỏ useEffect tự động kiểm tra
+    // Mặc định không chọn "Làm ngoài giờ"
     const [isOvertime, setIsOvertime] = useState(false); 
 
     // MỚI: Trạng thái cho chọn ngày xuất hóa đơn
@@ -103,14 +103,6 @@ const CreateReportScreen = () => {
     // Lọc danh sách nhân viên cho "Người làm cùng": Loại bỏ chính người dùng đang đăng nhập
     const availableEmployeesForPicker = (users || []).filter(u => u.id !== user?.uid); 
     
-    // ĐÃ LOẠI BỎ: useEffect tự động chọn "Làm ngoài giờ" theo thời gian
-    // useEffect(() => {
-    //     const currentHour = new Date().getHours();
-    //     if (currentHour >= 22 || currentHour < 6) { // Ví dụ: từ 10 tối đến 6 sáng
-    //         setIsOvertime(true);
-    //     }
-    // }, []);
-
     const handleServiceSelection = (value) => { setSelectedServices((prev) => prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]); };
     const formatCurrency = (num) => { if (!num) return ''; let cleanNum = num.toString().replace(/[^0-9]/g, ''); return cleanNum.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
     const handlePriceChange = (text) => { const numericValue = text.replace(/[^0-9]/g, ''); setRawPrice(numericValue); setPrice(formatCurrency(numericValue)); };
@@ -205,6 +197,9 @@ const CreateReportScreen = () => {
             const currentRevenuePercentage = defaultRevenuePercentage;
             const currentOvertimePercentage = overtimePercentage;
 
+            // Xác định trạng thái ban đầu của báo cáo: 'approved' nếu là admin, 'pending' nếu là employee
+            const initialStatus = userRole === 'admin' ? 'approved' : 'pending'; //
+
             // Sử dụng selectedReportDate cho createdAt
             const reportData = {
                 userId: currentUser.uid, 
@@ -216,7 +211,7 @@ const CreateReportScreen = () => {
                 paymentMethod: paymentMethod,
                 imageUrl: imageUrl,
                 createdAt: selectedReportDate ? new Date(selectedReportDate) : serverTimestamp(), // Sử dụng ngày đã chọn
-                status: 'pending', // Luôn là pending
+                status: initialStatus, // Sử dụng trạng thái đã xác định
                 isOvertime: isOvertime,
                 partnerId: selectedPartner || null,
                 partnerName: partnerName,
@@ -226,7 +221,7 @@ const CreateReportScreen = () => {
             };
 
             await addDoc(collection(db, 'reports'), reportData);
-            Alert.alert('Thành công', 'Hóa đơn đã được tạo và gửi đi chờ duyệt!'); 
+            Alert.alert('Thành công', `Hóa đơn đã được tạo và ${initialStatus === 'approved' ? 'duyệt tự động!' : 'gửi đi chờ duyệt!'}`); 
 
             // Reset form
             setPrice('');
@@ -285,7 +280,7 @@ const CreateReportScreen = () => {
     };
 
 
-    const partnerDisplayName = selectedPartner ? (users.find(e => e.id === selectedPartner)?.displayName || users.find(e => e.id === selectedPartner)?.email?.split('@')[0] || 'Không rõ') : '-- Không chọn --';
+    const partnerDisplayName = selectedPartner ? (users.find(e => e.id === selectedPartner)?.displayName || users.find(e => e.id === selectedPartner)?.email.split('@')[0] || 'Không rõ') : '-- Không chọn --';
 
     return (
         <View style={styles.fullScreenContainer}>

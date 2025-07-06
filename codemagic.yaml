@@ -1,0 +1,89 @@
+# Tham khảo thêm tại: https://docs.codemagic.io/yaml/building-a-react-native-app/
+# Vui lòng xem xét và cập nhật các giá trị cho phù hợp với dự án của bạn
+
+workflows:
+  expo-ios-build: # Tên duy nhất cho workflow này
+    name: Expo iOS Build for Suhii App Store
+    max_build_duration: 120 # Thời gian build tối đa (phút)
+    instance_type: mac_mini_m2 # Chọn loại máy build cho iOS (Mac)
+
+    environment:
+      # Bạn có thể định nghĩa các biến môi trường ở đây
+      # Ví dụ: cho Push Notifications hoặc các khóa API
+      # groups:
+      #   - apple_credentials # KẾT NỐI VỚI CHỨNG CHỈ APPLE CỦA BẠN TRÊN CODEMAGIC
+      vars:
+        # Quan trọng: Cập nhật Bundle ID của ứng dụng bạn
+        # Lấy từ app.json của bạn
+        BUNDLE_ID: "com.anonymous.suhiiappstorenew"
+        
+        # Phiên bản Node.js
+        NODE_VERSION: "20.x" # Hoặc phiên bản Node.js bạn đang dùng (ví dụ: 20.x)
+        
+        # Phiên bản Expo CLI (nếu cần thiết để đảm bảo tính nhất quán)
+        # EXPO_CLI_VERSION: "6.3.2" # Thay đổi tùy theo phiên bản bạn muốn dùng
+        
+        # SLUG của dự án Expo của bạn
+        EXPO_SLUG: "suhii-app-store-new" 
+    
+    # Kích hoạt build khi có push code lên nhánh chính (main)
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+
+    # Các bước script sẽ được thực thi
+    scripts:
+      - name: Set up Node.js
+        script: |
+          nvm install $NODE_VERSION
+          nvm use $NODE_VERSION
+      
+      - name: Install dependencies
+        script: |
+          # npm install
+          yarn install # Sử dụng yarn nếu dự án của bạn dùng yarn
+
+      # Quan trọng: Cài đặt EAS CLI
+      - name: Install EAS CLI
+        script: |
+          npm install -g eas-cli
+
+      - name: Configure Expo project (Update app.json if necessary)
+        script: |
+          # Đảm bảo slug trong app.json khớp với EAS Project ID
+          # Code này sẽ cập nhật slug trong app.json nếu nó khác
+          # Yêu cầu cài đặt 'json' CLI: npm install -g json
+          # Bạn có thể bỏ qua bước này nếu bạn đã đảm bảo slug luôn khớp trong app.json
+          # npx json -I -f app.json -e "this.expo.slug = process.env.EXPO_SLUG"
+          echo "Expo slug is set to $EXPO_SLUG"
+
+      - name: Build iOS app with EAS
+        script: |
+          # Lệnh build chính
+          # --non-interactive để EAS không hỏi tương tác trong quá trình build
+          # Bạn sẽ cần cấu hình Apple credentials trên Codemagic dashboard (xem phần quan trọng dưới đây)
+          eas build --platform ios --non-interactive --local-build=false
+
+    # Định nghĩa các artifacts (file đầu ra) để CodeMagic lưu trữ
+    artifacts:
+      - output/**/*.ipa # Đường dẫn tới file .ipa được tạo ra bởi EAS Build
+      - build/outputs/**/*.ipa # Một số trường hợp có thể cần đường dẫn này
+
+    # Cấu hình publish (tùy chọn)
+    # Bạn có thể cấu hình để tự động publish lên TestFlight hoặc Firebase App Distribution
+    # publishing:
+    #   ios_developer_portal:
+    #     api_key:
+    #       # Cấu hình Apple App Store Connect API Key tại đây (dưới dạng Secret Group)
+    #       key_id: $CM_APPLE_KEY_ID
+    #       issuer_id: $CM_APPLE_ISSUER_ID
+    #       key_file: $CM_APPLE_KEY_FILE # Đường dẫn tới file .p8 secret trong Codemagic
+    #     track: TestFlight # Hoặc AppStore
+    #     # Hoặc gửi lên Firebase App Distribution
+    #   firebase:
+    #     token: $FIREBASE_TOKEN
+    #     app_id: $FIREBASE_APP_ID
+    #     groups: your_testers_group # Nhóm testers trên Firebase App Distribution
