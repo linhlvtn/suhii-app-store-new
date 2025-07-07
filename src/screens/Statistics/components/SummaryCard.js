@@ -2,9 +2,9 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LineChart } from 'react-native-svg-charts';
-import { Path } from 'react-native-svg';
-import * as shape from 'd3-shape';
+// ĐÃ LOẠI BỎ: import { LineChart } from 'react-native-chart-kit';
+// ĐÃ LOẠI BỎ: import { Path } from 'react-native-svg';
+// ĐÃ LOẠI BỎ: import * as shape from 'd3-shape';
 
 const COLORS = {
     primary: '#1a1a1a',
@@ -55,29 +55,44 @@ const SummaryCard = ({ title, totalRevenue, totalReports, change, value, icon, c
         displayColor = color || COLORS.primary;
     }
 
-    const defaultSparklineData = [0, 1, 0.5, 2, 1.5, 3];
-    const dataForSparkline = chartData && chartData.datasets && chartData.datasets[0] && chartData.datasets[0].data.length > 0
-        ? chartData.datasets[0].data
-        : defaultSparklineData;
-
-    const SparklinePath = ({ line }) => (
-        <Path
-            key={'path'}
-            d={line}
-            stroke={changeColor}
-            fill={'none'}
-            strokeWidth={2}
-        />
-    );
+    // ĐÃ LOẠI BỎ: Dữ liệu và cấu hình cho sparkline (LineChart)
+    // const dataForSparkline = chartData && chartData.datasets && chartData.datasets[0] && chartData.datasets[0].data.length > 0
+    //     ? {
+    //         labels: chartData.labels || [],
+    //         datasets: [{ data: chartData.datasets[0].data }]
+    //       }
+    //     : { labels: [], datasets: [{ data: [0, 1, 0.5, 2, 1.5, 3] }] };
+    //
+    // const sparklineChartConfig = {
+    //     backgroundColor: COLORS.white,
+    //     backgroundGradientFrom: COLORS.white,
+    //     backgroundGradientTo: COLORS.white,
+    //     decimalPlaces: 1,
+    //     color: (opacity = 1) => `rgba(26, 26, 26, ${opacity})`,
+    //     labelColor: (opacity = 1) => `rgba(85, 85, 85, ${opacity})`,
+    //     fillShadowGradient: displayColor,
+    //     fillShadowGradientOpacity: 0.2,
+    //     strokeWidth: 2,
+    //     propsForDots: {
+    //         r: "0",
+    //     },
+    //     propsForBackgroundLines: {
+    //         strokeDasharray: "",
+    //         strokeWidth: 0
+    //     },
+    //     propsForLabels: {
+    //         display: 'none'
+    //     },
+    //     color: (opacity = 1) => displayColor,
+    // };
 
     return (
         <View style={[styles.card, { width: customCardWidth || '48%' }]}>
             {/* Header cho tiêu đề và LƯỢT KHÁCH */}
             <View style={styles.cardHeaderRow}>
                 <Text style={styles.cardTitleNew}>{title}</Text>
-                {/* HIỂN THỊ TỔNG LƯỢT KHÁCH TẠI ĐÂY */}
                 {totalReports !== undefined && (
-                    <Text style={styles.totalCustomersBadge}> {/* Changed style name here */}
+                    <Text style={styles.totalCustomersBadge}>
                         Tổng lượt khách: {totalReports}
                     </Text>
                 )}
@@ -103,20 +118,22 @@ const SummaryCard = ({ title, totalRevenue, totalReports, change, value, icon, c
                 </View>
             )}
 
-            {/* Sparkline - Chỉ hiển thị nếu KHÔNG phải hóa đơn ngày (isDailyReport là false) và có đủ dữ liệu */}
-            {!isDailyReport && dataForSparkline.length > 1 && (
+            {/* ĐÃ LOẠI BỎ: Phần render Sparkline (LineChart) */}
+            {/* {!isDailyReport && dataForSparkline.datasets[0].data.length > 1 && (
                 <LineChart
-                    style={styles.sparklineChart}
                     data={dataForSparkline}
-                    contentInset={{ top: 5, bottom: 5, left: 0, right: 0 }}
-                    curve={shape.curveNatural}
-                    svg={{ stroke: displayColor, strokeWidth: 2 }}
-                    renderDot={() => null}
-                    showGrid={false}
-                >
-                    <SparklinePath />
-                </LineChart>
-            )}
+                    width={styles.sparklineChart.width}
+                    height={styles.sparklineChart.height}
+                    chartConfig={sparklineChartConfig}
+                    bezier
+                    withVerticalLabels={false}
+                    withHorizontalLabels={false}
+                    withInnerLines={false}
+                    withOuterLines={false}
+                    fromZero={true}
+                    style={styles.sparklineChart}
+                />
+            )} */}
         </View>
     );
 };
@@ -168,7 +185,7 @@ const styles = StyleSheet.create({
         marginLeft: 5,
     },
     cardValueNew: {
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: 'bold',
         color: COLORS.primary,
         marginBottom: 8,
@@ -183,12 +200,13 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: 'bold',
     },
-    sparklineChart: {
-        height: 40,
-        width: '100%',
-        marginTop: 10,
-        alignSelf: 'center',
-    }
+    // ĐÃ LOẠI BỎ: sparklineChart style
+    // sparklineChart: {
+    //     height: 40,
+    //     width: '100%',
+    //     marginTop: 10,
+    //     alignSelf: 'center',
+    // }
 });
 
 export default SummaryCard;
