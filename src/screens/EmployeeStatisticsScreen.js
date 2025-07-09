@@ -1,5 +1,6 @@
 // src/screens/EmployeeStatisticsScreen.js
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react'; 
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Alert, Platform, FlatList, Image } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
@@ -8,14 +9,11 @@ import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
-
 import TimeFilterSegment from './Statistics/components/TimeFilterSegment';
 import SummaryCard from './Statistics/components/SummaryCard';
 import StatsChart from './Statistics/components/StatsChart';
 import ServicePieChart from './Statistics/components/ServicePieChart';
-// import LottieView from 'lottie-react-native'; // Loại bỏ LottieView
 
-// Import moment (nếu chưa có)
 import moment from 'moment';
 import 'moment/locale/vi'; 
 moment.locale('vi');
@@ -30,7 +28,6 @@ const COLORS = {
     lightGray: '#f0f2f5',
     success: '#28a745',
     danger: '#D32F2F',
-    warning: '#f39c12',
     black: '#1a1a1a',
     pending: '#f39c12',
     approved: '#28a745',
@@ -82,13 +79,13 @@ const getDynamicTitle = (period, date) => {
                 return `Hôm nay, ${moment(now).format('DD/MM/YYYY')}`;
             case 'week': {
                 const startOfWeek = getDateRange('week', date).startDate.toDate(); 
-                const endOfWeek = getDateRange('week', date).endDate.toDate();     
+                const endOfWeek = getDateRange('week', date).endDate.toDate(); 
                 return `Tuần (${moment(startOfWeek).format('DD/MM')} - ${moment(endOfWeek).format('DD/MM')})`;
             }
             case 'month':
                 return `Tháng ${moment(date).format('MM,YYYY')}`; 
             case 'year':
-                return `Năm ${moment(date).format('YYYY')}`;       
+                return `Năm ${moment(date).format('YYYY')}`; 
             default:
                 return 'Tổng quan';
         }
@@ -130,13 +127,14 @@ const initializeDailyData = (startDate, endDate, period) => {
             data[getFormattedDateKey(dayDate, 'week')] = 0;
         }
     } else if (period === 'month') {
-        while (currentDate.getMonth() === startDate.getMonth() && currentDate <= endDate) {
-            data[getFormattedDateKey(currentDate, 'month')] = 0;
-            currentDate.setDate(currentDate.getDate() + 1);
+        let loopDate = new Date(currentDate);
+        while (loopDate.getMonth() === currentDate.getMonth() && loopDate <= endDate) {
+            data[getFormattedDateKey(loopDate, 'month')] = 0;
+            loopDate.setDate(loopDate.getDate() + 1);
         }
     } else if (period === 'year') {
         for (let i = 0; i < 12; i++) {
-            let monthDate = new Date(startDate.getFullYear(), i, 1);
+            let monthDate = new Date(currentDate.getFullYear(), i, 1);
             data[getFormattedDateKey(monthDate, 'year')] = 0;
         }
     }
@@ -153,16 +151,17 @@ const EmployeeStatisticsScreen = () => {
 
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [selectedPeriod, setSelectedPeriod] = useState('today');
+    const [selectedPeriod, setSelectedPeriod] = useState('month');
     const [selectedDate, setSelectedDate] = useState(new Date()); 
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
 
-    const [totalRevenue, setTotalRevenue] = useState(0);
+    // totalRevenue và totalReports nằm trong summaryData, không phải state riêng
     const [actualRevenue, setActualRevenue] = useState(0);
-    const [summaryData, setSummaryData] = useState({ totalRevenue: 0, totalReports: 0 });
+    const [summaryData, setSummaryData] = useState({ totalRevenue: 0, totalReports: 0 }); 
+
     const [chartData, setChartData] = useState({ labels: [], datasets: [{ data: [] }] });
     const [pieChartData, setPieChartData] = useState([]);
-    const [employeeRankings, setEmployeeRankings] = useState([]);
+    const [employeeRankings, setEmployeeRankings] = useState([]); // Giữ lại nếu có thể dùng cho tương lai
     const [personalChartData, setPersonalChartData] = useState({ labels: [], datasets: [{ data: [] }] });
 
 
@@ -174,7 +173,6 @@ const EmployeeStatisticsScreen = () => {
         }
     };
 
-    // Hàm fetchEmployeeStatsData chỉ lấy và xử lý dữ liệu, không quản lý loading state
     const fetchEmployeeStatsData = useCallback(async (period, date) => {
         if (!employeeId) {
             console.warn("Employee ID not found, skipping data fetch.");
@@ -192,21 +190,18 @@ const EmployeeStatisticsScreen = () => {
                 orderBy("createdAt", "asc")
             );
             
-            // Tạo một Promise timeout
             const timeoutPromise = new Promise((resolve, reject) => {
                 const id = setTimeout(() => {
                     clearTimeout(id);
                     reject(new Error("Firebase query timed out after 15 seconds. This might indicate a missing index or a very large dataset."));
-                }, 15000); // 15 giây timeout
+                }, 15000); 
             });
 
-            // Chạy truy vấn getDocs song song với timeout
             const querySnapshot = await Promise.race([
                 getDocs(q),
                 timeoutPromise
             ]);
 
-            // Đảm bảo querySnapshot là hợp lệ trước khi sử dụng
             if (!querySnapshot || !querySnapshot.docs) {
                 console.error("Invalid querySnapshot received or timeout occurred:", querySnapshot);
                 throw new Error("Invalid data received from Firebase query or query timed out.");
@@ -214,12 +209,10 @@ const EmployeeStatisticsScreen = () => {
 
             const fetchedReports = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
 
-            // Kiểm tra fetchedReports có phải là mảng không trước khi forEach
             if (!Array.isArray(fetchedReports)) {
                 console.error("fetchedReports is not an array:", fetchedReports);
                 throw new Error("Fetched reports data is corrupted: not an array.");
             }
-
 
             let currentTotalRevenue = 0;
             let currentCalculatedActualRevenue = 0;
@@ -234,7 +227,7 @@ const EmployeeStatisticsScreen = () => {
                 const reportPrice = report.price || 0;
 
                 const commissionRate = report.commissionRate !== undefined ? report.commissionRate : 0.10; 
-                const overtimeRate = report.overtimeRate !== undefined ? report.overtimeRate : 0.30;   
+                const overtimeRate = report.overtimeRate !== undefined ? report.overtimeRate : 0.30;   
 
                 let revenuePerThisEmployeeActual = 0;
                 if (report.status === 'approved') {
@@ -313,16 +306,17 @@ const EmployeeStatisticsScreen = () => {
 
             const sortedEmployeeRankings = Array.from(employeeRevenueMap.values())
                 .sort((a, b) => b.commission - a.commission); 
-            setEmployeeRankings(sortedEmployeeRankings);
+            setEmployeeRankings(sortedEmployeeRankings); 
 
         } catch (error) {
             console.error("Lỗi khi tải hóa đơn thống kê cá nhân (trong fetchEmployeeStatsData):", error);
             Alert.alert("Lỗi", `Không thể tải dữ liệu thống kê cá nhân: ${error.message || error}`);
             throw error; 
+        } finally {
+            setLoading(false);
         }
     }, [employeeId, users]); 
 
-    // Hàm tổng quát để tải dữ liệu và quản lý trạng thái loading
     const loadStats = useCallback(async (period, date) => {
         setLoading(true);
         try {
@@ -340,7 +334,6 @@ const EmployeeStatisticsScreen = () => {
         }
     }, [loadStats, authUser, employeeId, userRole, selectedPeriod, selectedDate]); 
 
-    // Hàm xử lý chọn ngày từ Calendar (cho chế độ 'day' và 'week')
     const onDayPress = (day) => {
         setDatePickerVisible(false); 
         const selectedMoment = moment(day.dateString);
@@ -354,28 +347,24 @@ const EmployeeStatisticsScreen = () => {
         setSelectedDate(newDate);
     };
 
-    // Hàm xử lý chọn tháng từ Picker
     const onMonthChange = (monthValue) => {
         setDatePickerVisible(false); 
         const newDate = new Date(selectedDate.getFullYear(), monthValue - 1, 1); 
         setSelectedDate(newDate);
     };
 
-    // Hàm xử lý chọn năm từ Picker
     const onYearChange = (yearValue) => {
         setDatePickerVisible(false); 
         const newDate = new Date(yearValue, selectedDate.getMonth(), 1); 
         setSelectedDate(newDate);
     };
 
-    // Hàm xử lý khi thay đổi bộ lọc thời gian từ TimeFilterSegment
-    const handleFilterChange = (period) => {
+    const handleFilterChange = useCallback((period) => {
         setSelectedPeriod(period);
-        // Reset date to current if not custom, to avoid old date with new period context
         if (period !== 'custom') {
             setSelectedDate(new Date()); 
         }
-    };
+    }, []);
 
     const getSelectedDateString = () => {
         const year = selectedDate.getFullYear();
@@ -384,12 +373,14 @@ const EmployeeStatisticsScreen = () => {
         return `${year}-${month}-${day}`;
     };
 
-    const today = moment().format('YYYY-MM-DD');
-    const thirtyDaysAgo = moment().subtract(30, 'days').format('YYYY-MM-DD');
+    const todayMoment = useMemo(() => moment(), []); // <-- Đã thêm định nghĩa todayMoment
+    const minDateForCalendar = useMemo(() => todayMoment.clone().subtract(30, 'days').format('YYYY-MM-DD'), [todayMoment]); // <-- Đã sửa
+    const maxDateForCalendar = useMemo(() => todayMoment.format('YYYY-MM-DD'), [todayMoment]); // <-- Đã sửa
 
-    const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i); 
+    const years = useMemo(() => { 
+        return Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
+    }, []);
 
-    // Memoize renderReportItem để tránh re-render không cần thiết
     const renderReportItem = useCallback(({ item }) => {
         const statusMap = {
             approved: { icon: 'checkmark-circle', color: COLORS.approved },
@@ -410,20 +401,20 @@ const EmployeeStatisticsScreen = () => {
              let actualPerReport = 0;
 
              const commissionRate = item.commissionRate !== undefined ? item.commissionRate : 0.10; 
-             const overtimeRate = item.overtimeRate !== undefined ? item.overtimeRate : 0.30;   
+             const overtimeRate = item.overtimeRate !== undefined ? item.overtimeRate : 0.30;   
 
              if (item.userId === employeeId || item.partnerId === employeeId) {
-                const personalShareAmount = reportPrice / numParticipants; 
+                 const personalShareAmount = reportPrice / numParticipants; 
 
-                if (item.isOvertime) {
-                    actualPerReport = reportPrice * overtimeRate;
-                } else {
-                    actualPerReport = personalShareAmount * commissionRate; 
-                }
+                 if (item.isOvertime) {
+                     actualPerReport = reportPrice * overtimeRate;
+                 } else {
+                     actualPerReport = personalShareAmount * commissionRate; 
+                 }
              }
 
              if (actualPerReport > 0) {
-                actualReceivedRevenueText = actualPerReport.toLocaleString('vi-VN');
+                 actualReceivedRevenueText = actualPerReport.toLocaleString('vi-VN');
              }
         }
 
@@ -465,7 +456,6 @@ const EmployeeStatisticsScreen = () => {
                             )}
                         </View>
                         
-                        {/* MỚI: Chỉ hiển thị doanh thu thực nhận cho admin */}
                         {actualReceivedRevenueText && userRole === 'admin' ? (
                             <View style={styles.reportInfoRow}>
                                 <Ionicons name="cash" size={16} color={COLORS.success} />
@@ -514,8 +504,8 @@ const EmployeeStatisticsScreen = () => {
                                                 selectedColor: COLORS.primary
                                             }
                                         }}
-                                        minDate={selectedPeriod === 'custom' || selectedPeriod === 'today' ? thirtyDaysAgo : undefined} 
-                                        maxDate={selectedPeriod === 'custom' || selectedPeriod === 'today' ? today : undefined}      
+                                        minDate={minDateForCalendar} 
+                                        maxDate={maxDateForCalendar} 
                                     />
                                 ) : selectedPeriod === 'month' ? (
                                     <View>
@@ -570,9 +560,12 @@ const EmployeeStatisticsScreen = () => {
                         <Ionicons name="calendar-outline" size={22} color={COLORS.secondary} style={{ marginLeft: 8 }}/>
                     </TouchableOpacity>
                 </View>
-                <TimeFilterSegment activeFilter={selectedPeriod} onFilterChange={handleFilterChange} style={styles.timeFilterSegmentMargin} />
+                <TimeFilterSegment 
+                    activeFilter={selectedPeriod} 
+                    onFilterChange={handleFilterChange} 
+                    loading={loading}
+                />
                 
-                {/* THAY THẾ LOADING OVERLAY BẰNG ACTIVITY INDICATOR ĐƠN GIẢN */}
                 {loading ? (
                     <View style={styles.simpleLoadingContainer}>
                         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -585,9 +578,7 @@ const EmployeeStatisticsScreen = () => {
                                 title="Doanh thu cá nhân"
                                 totalRevenue={summaryData.totalRevenue}
                                 totalReports={summaryData.totalReports} 
-                                isDailyReport={selectedPeriod === 'today' || selectedPeriod === 'custom'}
-                                customCardWidth="100%"
-                                chartData={personalChartData}
+                                type="employeeSummary"
                             />
                         </View>
 
@@ -598,32 +589,37 @@ const EmployeeStatisticsScreen = () => {
                                     value={`${actualRevenue.toLocaleString('vi-VN')}₫`}
                                     description="Dự kiến hoa hồng + thưởng ngoài giờ"
                                     type="actualRevenue"
-                                    customCardWidth="100%"
-                                    isDailyReport={selectedPeriod === 'today' || selectedPeriod === 'custom'}
-                                    chartData={personalChartData}
                                 />
                             </View>
                         )}
 
-                        <StatsChart
-                            data={chartData}
-                            title="Biểu đồ doanh thu theo cá nhân"
+                        {/* ẨN BIỂU ĐỒ DOANH THU NẾU LÀ NGÀY HOẶC TUẦN */}
+                        {(selectedPeriod === 'month' || selectedPeriod === 'year') && (
+                            <StatsChart
+                                data={personalChartData}
+                                title="Biểu đồ Doanh thu cá nhân"
+                                style={styles.chartCardMargin}
+                                chartType={selectedPeriod === 'month' || selectedPeriod === 'year' ? 'line' : 'bar'}
+                            />
+                        )}
+
+                        <ServicePieChart 
+                            data={pieChartData}
+                            title="Tỷ lệ Dịch vụ đã thực hiện"
                             style={styles.chartCardMargin}
-                            chartType={selectedPeriod === 'today' || selectedPeriod === 'week' || selectedPeriod === 'custom' ? 'bar' : 'line'}
                         />
-                        <ServicePieChart data={pieChartData} title="Tỷ lệ dịch vụ theo cá nhân" style={styles.chartCardMargin} />
 
                         {reports.length > 0 ? (
                             <View style={styles.reportsListSection}>
                                 <Text style={styles.reportsListTitle}>Danh sách hóa đơn trong kỳ</Text>
                                 <FlatList
                                     data={reports}
-                                    keyExtractor={(item) => item.id}
+                                    keyExtractor={item => item.id}
                                     renderItem={renderReportItem}
                                     scrollEnabled={false}
                                     ItemSeparatorComponent={() => <View style={styles.reportSeparator} />}
                                     initialNumToRender={10} 
-                                    maxToRenderPerBatch={5}  
+                                    maxToRenderPerBatch={5} 
                                     updateCellsBatchingPeriod={100} 
                                     removeClippedSubviews={true} 
                                 />
@@ -662,11 +658,6 @@ const styles = StyleSheet.create({
     timeFilterSegmentMargin: { marginHorizontal: 20, marginBottom: 15 },
     titleTouchable: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
     subHeaderTitle: { fontSize: 18, fontWeight: '600', color: COLORS.secondary },
-    // Loại bỏ lottieContainer, lottieSpinner, và loadingText cũ nếu chúng chỉ dành cho Lottie
-    // loadingContainer: { height: 400, justifyContent: 'center', alignItems: 'center' },
-    // lottieSpinner: { width: 150, height: 150 },
-    // loadingText: { marginTop: 0, fontSize: 16, color: COLORS.secondary },
-
     datePickerBackdrop: { 
         flex: 1, 
         justifyContent: 'center', 
@@ -808,7 +799,6 @@ const styles = StyleSheet.create({
         marginHorizontal: 20,
         marginBottom: 20,
     },
-    // Styles cho loading đơn giản mới
     simpleLoadingContainer: {
         flex: 1,
         justifyContent: 'center',

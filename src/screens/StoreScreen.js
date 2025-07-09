@@ -1,7 +1,7 @@
 // src/screens/StoreScreen.js
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, RefreshControl, Image, TouchableOpacity, Alert, Modal, Platform, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, RefreshControl, Image, TouchableOpacity, Alert, Modal, Platform, TouchableWithoutFeedback, ActivityIndicator, SectionList } from 'react-native';
 import { collection, getDocs, query, orderBy, where, doc, updateDoc, deleteDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -9,7 +9,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useAuth } from '../context/AuthContext';
-import { SwipeListView, SwipeRow } from 'react-native-swipe-list-view';
 
 import LoadingOverlay from '../components/LoadingOverlay';
 
@@ -94,7 +93,7 @@ const StoreScreen = () => {
     const { user, userRole, initializing } = useAuth();
     const [rawReports, setRawReports] = useState([]);
     const [sections, setSections] = useState([]);
-    const [selectedDate, setSelectedDate] = useState(null);
+    const [selectedDate, setSelectedDate] = useState(null); // Vẫn giữ để lọc tùy chỉnh
     const [statusFilter, setStatusFilter] = useState('all');
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -105,7 +104,6 @@ const StoreScreen = () => {
     const navigation = useNavigation();
 
     const fetchReports = useCallback(async () => {
-        // Đảm bảo luôn trả về một hàm, kể cả khi userRole chưa có
         if (!userRole) {
             setLoading(false);
             return () => {};
@@ -114,18 +112,42 @@ const StoreScreen = () => {
         try {
             const reportsRef = collection(db, 'reports');
             let queries = [orderBy('createdAt', 'desc')];
+            
+            // --- THAY ĐỔI ĐỂ LỌC THEO 2 THÁNG GẦN NHẤT ---
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+
+            // Tính ngày bắt đầu của tháng trước
+            const startDateOfPreviousMonth = new Date(currentYear, currentMonth - 1, 1);
+            startDateOfPreviousMonth.setHours(0, 0, 0, 0);
+
+            // Tính ngày kết thúc của tháng hiện tại
+            const endDateOfCurrentMonth = new Date(currentYear, currentMonth + 1, 0); // Ngày 0 của tháng tiếp theo là ngày cuối cùng của tháng hiện tại
+            endDateOfCurrentMonth.setHours(23, 59, 59, 999);
+
+            // Áp dụng điều kiện lọc thời gian mặc định
+            queries.push(where('createdAt', '>=', startDateOfPreviousMonth));
+            queries.push(where('createdAt', '<=', endDateOfCurrentMonth));
+            // --- KẾT THÚC THAY ĐỔI LỌC 2 THÁNG GẦN NHẤT ---
+
             if (userRole === 'employee' && user) {
                 queries.push(where('participantIds', 'array-contains', user.uid));
             } else if (userRole === 'admin' && statusFilter !== 'all') {
                 queries.push(where('status', '==', statusFilter));
             }
+            
+            // Nếu có selectedDate (lọc tùy chỉnh qua lịch), ưu tiên lọc đó
             if (selectedDate) {
                 const startOfDay = new Date(selectedDate);
                 startOfDay.setHours(0, 0, 0, 0);
                 const endOfDay = new Date(selectedDate);
                 endOfDay.setHours(23, 59, 59, 999);
+                // Ghi đè các điều kiện lọc thời gian mặc định
+                queries = queries.filter(q => !q.field || (q.field !== 'createdAt' && q.operator !== '>=' && q.operator !== '<='));
                 queries.push(where('createdAt', '>=', startOfDay), where('createdAt', '<=', endOfDay));
             }
+
             const q = query(reportsRef, ...queries);
             const unsubscribe = onSnapshot(q, (querySnapshot) => {
                 setRawReports(querySnapshot.docs.map(d => ({ key: d.id, ...d.data() })));
@@ -143,7 +165,7 @@ const StoreScreen = () => {
             setLoading(false);
             return () => {};
         }
-    }, [user, userRole, statusFilter, selectedDate]);
+    }, [user, userRole, statusFilter, selectedDate]); // Thêm selectedDate vào dependencies
 
     useEffect(() => {
         if (userRole !== 'admin') return;
@@ -317,6 +339,7 @@ const StoreScreen = () => {
         setSelectedImageUrl(null);
     };
 
+    // Component render item
     const renderItem = ({ item }) => {
         const statusMap = {
             approved: { icon: 'checkmark-circle', color: COLORS.approved },
@@ -325,12 +348,10 @@ const StoreScreen = () => {
         };
         const statusInfo = statusMap[item.status] || { icon: 'help-circle', color: COLORS.gray };
 
-        // <-- LOGIC canEdit & canDelete -->
         const canEdit = userRole === 'admin' || (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
         const canDelete = userRole === 'admin' || (userRole === 'employee' && item.userId === user?.uid && item.status === 'pending');
 
         const numberOfParticipants = (item.participantIds && Array.isArray(item.participantIds) && item.participantIds.length > 0) ? item.participantIds.length : 1;
-
         const originalPrice = item.price || 0;
         const sharedPrice = numberOfParticipants > 0 ? originalPrice / numberOfParticipants : originalPrice;
 
@@ -361,37 +382,22 @@ const StoreScreen = () => {
 
         const displayOvertimeRate = item.overtimeRate !== undefined ? (item.overtimeRate * 100).toFixed(0) : '30';
 
+        // Loại bỏ các hằng số liên quan đến Reanimated/Gesture Handler nếu không còn dùng
+        const ITEM_HEIGHT = 114; 
+        
         return (
-            <SwipeRow
-                // MỚI: Điều chỉnh rightOpenValue để ngăn vuốt khi không được phép xóa
-                rightOpenValue={canDelete ? -85 : 0}
-                disableRightSwipe={!canDelete} // Giữ lại dòng này để đảm bảo tính nhất quán
-                key={item.key}
+            <TouchableWithoutFeedback
+                onPress={() => {
+                    if (canEdit) {
+                        handleEdit(item);
+                    } else if (item.imageUrl) {
+                        openImagePreview(item.imageUrl);
+                    }
+                }}
+                disabled={!canEdit && !item.imageUrl}
             >
-                {/* Hidden Item */}
-                <View style={styles.rowBack}>
-                    <TouchableOpacity
-                        style={styles.backRightBtn}
-                        onPress={() => handleDelete(item.key)}
-                        disabled={!canDelete}
-                    >
-                        <Ionicons name="trash-outline" size={28} color={COLORS.white} />
-                        <Text style={styles.backTextWhite}>Xóa</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Visible Item */}
-                <TouchableWithoutFeedback
-                    onPress={() => {
-                        if (canEdit) {
-                            handleEdit(item);
-                        } else if (item.imageUrl) {
-                            openImagePreview(item.imageUrl);
-                        }
-                    }}
-                    disabled={!canEdit && !item.imageUrl}
-                >
-                    <View style={styles.itemContainer}>
+                <View style={styles.itemContainer}>
+                    <View style={styles.itemContentWrapper}> 
                         <View>
                             <Image
                                 source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/default-image.png')}
@@ -428,7 +434,7 @@ const StoreScreen = () => {
                                         </MenuOptions>
                                     </Menu>
                                 )}
-                                {userRole === 'admin' && ( // Admin luôn có thể chỉnh sửa và xóa
+                                {userRole === 'admin' && (
                                     <Menu>
                                         <MenuTrigger style={styles.menuTrigger}>
                                             <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
@@ -449,17 +455,13 @@ const StoreScreen = () => {
                                 <Text style={styles.sharedPriceText}>
                                     {(item.price || 0).toLocaleString('vi-VN')}₫
                                 </Text>
-                                {/* <-- BỔ SUNG HIỂN THỊ PHƯƠNG THỨC THANH TOÁN --> */}
                                 {item.paymentMethod && (
                                     <Text style={styles.paymentMethodText}>
                                         ({item.paymentMethod === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'})
                                     </Text>
                                 )}
-                                {/* <-- KẾT THÚC BỔ SUNG --> */}
-
                             </View>
 
-                            {/* MỚI: Chỉ hiển thị doanh thu thực nhận cho admin */}
                             {actualReceivedRevenueText && item.status === 'approved' && userRole === 'admin' ? (
                                 <View style={styles.infoRow}>
                                     <Ionicons name="cash" size={16} color={COLORS.approved} />
@@ -479,7 +481,7 @@ const StoreScreen = () => {
                             {item.note && typeof item.note === 'string' && item.note.trim() !== '' && (
                                 <View style={styles.infoRow}>
                                     <Ionicons name="document-text-outline" size={16} color={COLORS.gray} />
-                                    <Text style={styles.infoText} numberOfLines={1}>
+                                    <Text style={styles.infoNote} numberOfLines={1}>
                                         {item.note}
                                     </Text>
                                 </View>
@@ -504,8 +506,8 @@ const StoreScreen = () => {
                             )}
                         </View>
                     </View>
-                </TouchableWithoutFeedback>
-            </SwipeRow>
+                </View>
+            </TouchableWithoutFeedback>
         );
     };
 
@@ -530,7 +532,6 @@ const StoreScreen = () => {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                {/* HIỂN THỊ DOANH THU HÔM NAY */}
                 <HeaderLogo />
                 <View style={styles.todayRevenueContainer}>
                     <Text style={styles.todayRevenueLabel}>Hôm nay</Text>
@@ -633,10 +634,9 @@ const StoreScreen = () => {
             {/* Sử dụng LoadingOverlay cho cả initializing và loading */}
             <LoadingOverlay isVisible={initializing || loading} message={initializing ? "Đang khởi tạo ứng dụng..." : "Đang tải hóa đơn..."} />
 
-            {/* Chỉ hiển thị SwipeListView khi không loading và không initializing */}
+            {/* SectionList không thay đổi */}
             {!initializing && !loading && (
-                <SwipeListView
-                    useSectionList
+                <SectionList
                     sections={sections}
                     renderItem={renderItem}
                     renderSectionHeader={renderSectionHeader}
@@ -730,7 +730,23 @@ const styles = StyleSheet.create({
     sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, backgroundColor: '#f7f7f7', paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
     sectionHeaderText: { fontWeight: 'bold', fontSize: 16 },
     sectionRevenueText: { fontWeight: '600', color: COLORS.gray },
-    itemContainer: { flexDirection: 'row', backgroundColor: COLORS.white, paddingVertical: 12, paddingLeft: 12, paddingRight: 5, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+    
+    // Đã cập nhật styles cho item và loại bỏ các style swipe cụ thể
+    itemContainer: { 
+        flexDirection: 'row', 
+        backgroundColor: COLORS.white, 
+        paddingVertical: 12, 
+        paddingLeft: 12, 
+        paddingRight: 5, 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#f0f0f0',
+        width: '100%', // Đảm bảo item chiếm toàn bộ chiều rộng
+        // Loại bỏ position: 'absolute', left, right vì không còn swipe
+    },
+    itemContentWrapper: { 
+        flexDirection: 'row', 
+        flex: 1,
+    },
     itemImage: { width: 90, height: 90, borderRadius: 10, backgroundColor: COLORS.lightGray },
     itemContent: { flex: 1, marginLeft: 12, justifyContent: 'center' },
     itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, },
@@ -750,6 +766,7 @@ const styles = StyleSheet.create({
     overtimeText: { marginLeft: 8, fontSize: 12, fontWeight: '700' },
     infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
     infoText: { marginLeft: 8, fontSize: 13, color: COLORS.green, flexShrink: 1 },
+    infoNote: { marginLeft: 8, fontSize: 13, color: COLORS.black, flexShrink: 1 },
     infoTextAuth: { marginLeft: 8, fontSize: 13, color: COLORS.gray, flexShrink: 1 },
     statusIconOnImage: { position: 'absolute', top: 5, left: 5, backgroundColor: 'rgba(255, 255, 255, 0.8)', borderRadius: 13, padding: 1, },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
@@ -757,9 +774,12 @@ const styles = StyleSheet.create({
     modalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center' },
     modalCloseButton: { position: 'absolute', top: 50, right: 20, zIndex: 1 },
     fullscreenImage: { width: '100%', height: '80%' },
-    rowBack: { alignItems: 'center', backgroundColor: COLORS.rejected, flex: 1, flexDirection: 'row', justifyContent: 'flex-end', },
-    backRightBtn: { alignItems: 'center', bottom: 0, justifyContent: 'center', position: 'absolute', top: 0, width: 85, },
-    backTextWhite: { color: '#FFF', fontWeight: 'bold' },
+
+    // Loại bỏ các style cũ của swipe
+    rowBack: { display: 'none' }, // Ẩn hoàn toàn phần back row
+    backRightBtn: { display: 'none' }, // Ẩn hoàn toàn các nút
+    backTextWhite: { display: 'none' }, // Ẩn hoàn toàn text
+
     menuTrigger: { padding: 5, },
     divider: { height: 1, backgroundColor: COLORS.lightGray },
     adminActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 10, marginTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
@@ -783,12 +803,13 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: COLORS.black,
     },
-    paymentMethodText: { // <-- Style mới
+    paymentMethodText: { 
         fontSize: 13,
         color: COLORS.gray,
         marginLeft: 8,
     }
 });
+
 const menuOptionsStyles = { optionsContainer: { borderRadius: 10, padding: 5, marginTop: 25 } };
 
 export default StoreScreen;

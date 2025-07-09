@@ -87,7 +87,7 @@ const SummaryCard = ({ title, totalRevenue, totalReports, change, value, icon, c
     // };
 
     return (
-        <View style={[styles.card, { width: customCardWidth || '48%' }]}>
+        <View style={[styles.card, { width: customCardWidth || '100%' }]}>
             {/* Header cho tiêu đề và LƯỢT KHÁCH */}
             <View style={styles.cardHeaderRow}>
                 <Text style={styles.cardTitleNew}>{title}</Text>

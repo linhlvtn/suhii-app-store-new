@@ -2,56 +2,157 @@
 
 import React, { useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions, ScrollView } from 'react-native';
-// Thay thế imports từ react-native-chart-kit bằng react-native-gifted-charts
-import { LineChart, BarChart } from 'react-native-gifted-charts'; 
+import { LineChart, BarChart } from 'react-native-gifted-charts';
 
 const COLORS = { 
     primary: '#1a1a1a', 
     secondary: '#555', 
     white: '#FFFFFF',
-    gradientStart: '#40a829', // Màu xanh lá cây đậm (ví dụ cho LineChart)
-    gradientEnd: '#6ac955',   // Màu xanh lá cây nhạt hơn (ví dụ cho LineChart)
-    barColor: '#1a1a1a',      // Màu cột mặc định
+    gradientStart: '#40a829',
+    gradientEnd: '#6ac955',
+    barColor: '#1a1a1a',
+    ruleColor: '#e0e0e0',
+    pointerColor: '#1a1a1a',
 };
 
 const StatsChart = ({ data, chartType = 'bar', title }) => {
-    // Chuyển đổi dữ liệu từ format { labels: [...], datasets: [{ data: [...] }] }
-    // sang format [{ value: Y, label: X }, ...] cho react-native-gifted-charts
+    const screenWidth = Dimensions.get('window').width;
+    const chartCardWidth = screenWidth - 40;
+    const chartPadding = 20;
+    const chartWidth = chartCardWidth - chartPadding;
+
+    // Chuyển đổi dữ liệu sang format của react-native-gifted-charts
     const chartData = useMemo(() => {
-        if (!data || !data.labels || !data.labels.length || !data.datasets || !data.datasets[0] || !data.datasets[0].data) {
+        if (!data?.labels?.length || !data?.datasets?.[0]?.data?.length) {
             return [];
         }
-        return data.labels.map((label, index) => ({
-            value: data.datasets[0].data[index], // Giá trị cho trục Y
-            label: label,                       // Nhãn cho trục X
-        }));
-    }, [data]);
+        
+        return data.labels.map((label, index) => {
+            // Chuyển đổi format ngày tháng từ "ngày-tháng" thành "ngày/tháng"
+            const formattedLabel = label.replace(/-/g, '/');
+            
+            return {
+                value: data.datasets[0].data[index] || 0,
+                label: formattedLabel,
+                // Thêm màu cho từng cột nếu cần
+                frontColor: chartType === 'bar' ? COLORS.barColor : undefined,
+            };
+        });
+    }, [data, chartType]);
 
     const isDataValid = chartData.length > 0 && chartData.some(d => d.value > 0);
-    const chartWidth = Dimensions.get('window').width - 40; // Chiều rộng của card
-
-    // Tính toán chiều rộng động cho ScrollView để biểu đồ có thể cuộn ngang
-    // Mỗi điểm dữ liệu sẽ chiếm một khoảng nhất định (ví dụ 60px cho cột/nhãn)
-    const dynamicChartContentWidth = Math.max(chartWidth, chartData.length * 60);
-
+    
+    // Tính toán chiều rộng cho scroll view
+    const itemWidth = chartType === 'bar' ? 50 : 60;
+    const minScrollWidth = Math.max(chartWidth, chartData.length * itemWidth);
+    
     const scrollViewRef = useRef(null);
 
+    // Tự động cuộn về đầu khi có dữ liệu mới
     useEffect(() => {
-        // Cuộn về đầu biểu đồ khi component được hiển thị
         if (isDataValid && scrollViewRef.current) {
             const timer = setTimeout(() => {
-                scrollViewRef.current.scrollTo({ x: 0, animated: true }); // SỬA ĐỔI TẠI ĐÂY: cuộn về đầu
-            }, 300); 
+                scrollViewRef.current.scrollTo({ x: 0, animated: true });
+            }, 300);
             return () => clearTimeout(timer);
         }
-    }, [isDataValid, chartData]); // Đã bỏ chartType khỏi dependencies vì chỉ cần cuộn khi data hợp lệ
+    }, [isDataValid, chartData]);
 
-    // Xác định giá trị lớn nhất cho trục Y để đảm bảo biểu đồ không bị cắt
+    // Tính giá trị max cho trục Y
     const maxValue = useMemo(() => {
-        if (!isDataValid) return 1;
-        return Math.max(...chartData.map(d => d.value)) * 1.2; // Thêm 20% khoảng trống phía trên
+        if (!isDataValid) return 10;
+        const max = Math.max(...chartData.map(d => d.value));
+        return Math.ceil(max * 1.2); // Thêm 20% buffer
     }, [chartData, isDataValid]);
 
+    // Cấu hình chung cho cả hai loại biểu đồ
+    const commonChartProps = {
+        width: minScrollWidth - 20,
+        height: 220,
+        maxValue,
+        noOfSections: 5,
+        yAxisTextStyle: { color: COLORS.secondary, fontSize: 11 },
+        yAxisColor: COLORS.secondary,
+        xAxisLabelTextStyle: { color: COLORS.secondary, fontSize: 10 },
+        xAxisColor: COLORS.secondary,
+        yAxisLabelSuffix: 'M₫',
+        hideRules: false,
+        rulesColor: COLORS.ruleColor,
+        rulesType: 'solid',
+        isAnimated: true,
+        animationDuration: 600,
+    };
+
+    // Render LineChart
+    const renderLineChart = () => (
+        <LineChart
+            data={chartData}
+            {...commonChartProps}
+            // Cấu hình đường
+            color={COLORS.gradientStart}
+            thickness={2.5}
+            curved={true} // Đường cong mượt
+            // Cấu hình area chart
+            areaChart={true}
+            startFillColor={COLORS.gradientStart}
+            endFillColor={COLORS.gradientEnd}
+            startOpacity={0.7}
+            endOpacity={0.2}
+            // Cấu hình điểm dữ liệu
+            hideDataPoints={false}
+            dataPointsColor={COLORS.primary}
+            dataPointsRadius={4}
+            // Cấu hình pointer khi touch
+            pointerConfig={{
+                pointerStripUptoDataIndex: chartData.length - 1,
+                activatePointersOnLongPress: false, // Thay đổi thành false để tap ngay
+                activatePointersDelay: 50, // Giảm delay
+                pointerColor: COLORS.pointerColor,
+                pointerStripWidth: 2,
+                pointerStripColor: COLORS.secondary,
+                pointerStripHeight: 200,
+                showPointerStrip: true,
+                pointerStripUptoDataIndex: chartData.length - 1,
+                pointerLabelComponent: (items) => {
+                    const item = items[0];
+                    return (
+                        <View style={styles.pointerLabel}>
+                            <Text style={styles.pointerLabelText}>{item.label}</Text>
+                            <Text style={styles.pointerLabelValue}>
+                                {(item.value * 1000000).toLocaleString('vi-VN')}₫
+                            </Text>
+                        </View>
+                    );
+                },
+                // Thêm cấu hình cho pointer
+                pointerVanishDelay: 3000, // Label tự động ẩn sau 3 giây
+                persistPointer: false, // Không giữ pointer cố định
+                stripOpacity: 0.7,
+                stripColor: COLORS.secondary,
+                stripWidth: 1,
+            }}
+        />
+    );
+
+    // Render BarChart
+    const renderBarChart = () => (
+        <BarChart
+            data={chartData}
+            {...commonChartProps}
+            // Cấu hình cột
+            barWidth={chartData.length > 10 ? 18 : 22}
+            spacing={chartData.length > 10 ? 15 : 20}
+            roundedTop={true}
+            roundedBottom={false}
+            frontColor={COLORS.barColor}
+            // Gradient cho cột nếu muốn
+            gradientColor={COLORS.gradientEnd}
+            // Cấu hình label trên cột
+            showValuesAsTopLabel={false}
+            // Cấu hình animation
+            animationDuration={800}
+        />
+    );
 
     return (
         <View style={styles.chartCard}>
@@ -61,83 +162,19 @@ const StatsChart = ({ data, chartType = 'bar', title }) => {
                     ref={scrollViewRef}
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ width: dynamicChartContentWidth, paddingHorizontal: 0 }} // Đã chỉnh paddingHorizontal
+                    contentContainerStyle={{
+                        width: minScrollWidth,
+                        paddingHorizontal: 10,
+                    }}
+                    style={styles.scrollView}
                 >
-                    {chartType === 'line' ? (
-                        <LineChart
-                            data={chartData}
-                            width={dynamicChartContentWidth - 30} // Điều chỉnh width để vừa với padding của LineChart
-                            height={230}
-                            // Cấu hình trục X
-                            xAxisLabelTextStyle={{ color: COLORS.secondary, fontSize: 12 }}
-                            xAxisColor={COLORS.secondary}
-                            // Cấu hình trục Y
-                            yAxisTextStyle={{ color: COLORS.secondary, fontSize: 12 }}
-                            yAxisLabelSuffix="M₫" // Đơn vị tiền tệ
-                            yAxisColor={COLORS.secondary}
-                            maxValue={maxValue} // Giá trị lớn nhất trên trục Y
-                            noOfSections={5} // Số lượng phần trên trục Y
-                            roundToDigits={1} // Làm tròn số thập phân trên trục Y
-                            
-                            // Cấu hình đường biểu đồ
-                            color={COLORS.gradientStart} // Màu của đường
-                            thickness={3} // Độ dày của đường
-                            hideRules={false} // Hiển thị đường kẻ ngang
-                            rulesColor="#e0e0e0" // Màu đường kẻ ngang
-                            rulesType="solid" // Kiểu đường kẻ ngang
-                            startFillColor={COLORS.gradientStart} // Màu gradient bắt đầu
-                            endFillColor={COLORS.gradientEnd}   // Màu gradient kết thúc
-                            startOpacity={0.8}
-                            endOpacity={0.3}
-                            areaChart // Hiển thị khu vực dưới đường
-                            
-                            // Các tùy chỉnh khác
-                            bezier={true} // BẬT BEZIER LUÔN CHO LINE CHART
-                            pointerConfig={{
-                                pointerStripUptoDataIndex: chartData.length -1,
-                                activatePointersOnLongPress: true,
-                                activatePointersDelay: 150,
-                                pointerColor: COLORS.primary,
-                                pointerStripWidth: 1,
-                                pointerStripColor: COLORS.secondary,
-                                pointerStripHeight: 120,
-                                pointerLabelComponent: (item) => (
-                                    <View style={styles.pointerLabel}>
-                                        <Text style={styles.pointerLabelText}>{item[0].label}</Text>
-                                        <Text style={styles.pointerLabelValue}>
-                                            {(item[0].value * 1000000).toLocaleString('vi-VN')}₫
-                                        </Text>
-                                    </View>
-                                ),
-                            }}
-                        />
-                    ) : (
-                        <BarChart
-                            data={chartData}
-                            width={dynamicChartContentWidth - 30} // Điều chỉnh width để vừa với padding của BarChart
-                            height={230}
-                            barWidth={22} // Chiều rộng của mỗi cột
-                            spacing={chartData.length > 7 ? 20 : 15} // Khoảng cách giữa các cột
-                            roundedTop // Bo tròn đỉnh cột
-                            noOfSections={5}
-                            maxValue={maxValue}
-                            yAxisLabelSuffix="M₫"
-                            yAxisTextStyle={{ color: COLORS.secondary, fontSize: 12 }}
-                            yAxisColor={COLORS.secondary}
-                            xAxisLabelTextStyle={{ color: COLORS.secondary, fontSize: 12 }}
-                            xAxisColor={COLORS.secondary}
-                            frontColor={COLORS.barColor} // Màu của cột
-                            hideRules={false}
-                            rulesColor="#e0e0e0"
-                            rulesType="solid"
-                            isAnimated // Kích hoạt animation khi render
-                            animationDuration={800}
-                        />
-                    )}
+                    <View style={styles.chartContainer}>
+                        {chartType === 'line' ? renderLineChart() : renderBarChart()}
+                    </View>
                 </ScrollView>
             ) : (
                 <View style={styles.noDataContainer}>
-                    <Text style={styles.noDataText}>Không có dữ liệu cho biểu đồ.</Text>
+                    <Text style={styles.noDataText}>Không có dữ liệu để hiển thị</Text>
                 </View>
             )}
         </View>
@@ -157,7 +194,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 3,
-        overflow: 'hidden', 
+        overflow: 'hidden',
     },
     sectionTitle: {
         fontSize: 18,
@@ -167,8 +204,15 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-start',
         paddingHorizontal: 15,
     },
+    scrollView: {
+        width: '100%',
+    },
+    chartContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     noDataContainer: {
-        height: 230, 
+        height: 220,
         justifyContent: 'center',
         alignItems: 'center',
         width: Dimensions.get('window').width - 40,
@@ -176,22 +220,33 @@ const styles = StyleSheet.create({
     noDataText: {
         color: COLORS.secondary,
         fontSize: 15,
+        textAlign: 'center',
     },
     pointerLabel: {
         backgroundColor: COLORS.primary,
-        paddingHorizontal: 8,
-        paddingVertical: 6,
-        borderRadius: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 8,
         alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        elevation: 8,
+        minWidth: 100,
+        borderWidth: 1,
+        borderColor: COLORS.white,
     },
     pointerLabelText: {
         color: COLORS.white,
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: 'bold',
+        marginBottom: 4,
     },
     pointerLabelValue: {
         color: COLORS.white,
-        fontSize: 11,
+        fontSize: 12,
+        fontWeight: '600',
     },
 });
 

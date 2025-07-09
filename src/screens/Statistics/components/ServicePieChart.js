@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { PieChart } from 'react-native-chart-kit';
+import { PieChart } from 'react-native-gifted-charts';
 
 // --- THEME COLORS ---
 const COLORS = {
@@ -19,10 +19,13 @@ const ServicePieChart = ({ data }) => {
     // Tính tổng số lượng để tính phần trăm
     const totalPopulation = isDataValid ? data.reduce((sum, item) => sum + item.population, 0) : 0;
 
-    // Cấu hình cho biểu đồ
-    const chartConfig = {
-        color: (opacity = 1) => `rgba(26, 26, 26, ${opacity})`,
-    };
+    // Chuyển đổi dữ liệu cho react-native-gifted-charts
+    const chartData = isDataValid ? data.map((item) => ({
+        value: item.population,
+        color: item.color,
+        text: item.name,
+        // Thêm các thuộc tính khác nếu cần
+    })) : [];
 
     return (
         <View style={styles.chartCard}>
@@ -32,15 +35,23 @@ const ServicePieChart = ({ data }) => {
                     {/* Cột 1: Biểu đồ */}
                     <View style={styles.chartWrapper}>
                         <PieChart
-                            data={data}
-                            width={Dimensions.get('window').width / 2.2} // Chiều rộng biểu đồ nhỏ hơn
-                            height={140}
-                            chartConfig={chartConfig}
-                            accessor={"population"}
-                            backgroundColor={"transparent"}
-                            paddingLeft={"15"}
-                            center={[0, 0]}
-                            hasLegend={false} // Tắt chú thích mặc định
+                            data={chartData}
+                            radius={70}
+                            innerRadius={0}
+                            strokeColor={COLORS.white}
+                            strokeWidth={2}
+                            showText={false}
+                            showValuesAsLabels={false}
+                            showGradient={false}
+                            textColor={COLORS.primary}
+                            textSize={10}
+                            focusOnPress={true}
+                            toggleFocusOnPress={false}
+                            isAnimated={true}
+                            animationDuration={800}
+                            // Tùy chỉnh thêm
+                            donut={false}
+                            sectionAutoFocus={false}
                         />
                     </View>
 
@@ -96,10 +107,12 @@ const styles = StyleSheet.create({
     chartWrapper: {
         justifyContent: 'center',
         alignItems: 'center',
+        width: 150, // Cố định chiều rộng cho biểu đồ
+        height: 150,
     },
     legendWrapper: {
         flex: 1, // Chiếm phần không gian còn lại
-        marginLeft: 5,
+        marginLeft: 15,
         justifyContent: 'center',
     },
     legendItem: {
