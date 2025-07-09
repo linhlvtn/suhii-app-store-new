@@ -5,14 +5,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-     "notification": {
-      "icon": "./assets/notification-icon.png",
-      "color": "#FFFFFF",
-      "iosDisplayInForeground": true,
-      "vapidPublicKey": "BIb4C__KnHt7yBRagtr4imiIIekGKxrG5jgDz6Znfuu2T0XBVUHHuu6NcPCTrPbh4NtkU8ytshDO9pyS-a_2eko"
-    },
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "jsEngine": "jsc",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -21,16 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "jsEngine": "jsc"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
       "jsEngine": "jsc",
-      "package": "com.anonymous.suhiiappstorenew"
+      "bundleIdentifier": "com.anonymous.suhiiappstorenew",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
