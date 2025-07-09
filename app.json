@@ -16,8 +16,9 @@
       "supportsTablet": true,
       "jsEngine": "jsc",
       "bundleIdentifier": "com.anonymous.suhiiappstorenew",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+       "infoPlist": {
+        "NSCameraUsageDescription": "Ứng dụng cần truy cập camera để chụp ảnh hóa đơn",
+        "NSPhotoLibraryUsageDescription": "Ứng dụng cần truy cập thư viện ảnh để chọn ảnh hóa đơn."
       }
     },
     "web": {
