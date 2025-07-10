@@ -1,21 +1,41 @@
 // src/screens/Statistics/components/SummaryCard.js
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-// ĐÃ LOẠI BỎ: import { LineChart } from 'react-native-chart-kit';
-// ĐÃ LOẠI BỎ: import { Path } from 'react-native-svg';
-// ĐÃ LOẠI BỎ: import * as shape from 'd3-shape';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width } = Dimensions.get('window');
 
 const COLORS = {
-    primary: '#1a1a1a',
-    secondary: '#6c757d',
+    // Modern color palette
+    primary: '#1A1D29',
+    secondary: '#2A2D3A',
+    accent: '#6C5CE7',
+    success: '#00B894',
+    warning: '#FDCB6E',
+    danger: '#E17055',
+    
+    // Gradient colors
+    gradientPurple: ['#667eea', '#764ba2'],
+    gradientBlue: ['#667eea', '#3b82f6'],
+    gradientGreen: ['#11998e', '#38ef7d'],
+    gradientOrange: ['#ffd89b', '#19547b'],
+    gradientPink: ['#f093fb', '#f5576c'],
+    gradientTeal: ['#4facfe', '#00f2fe'],
+    gradientDark: ['#2C3E50', '#34495E'],
+    gradientDarkBlue: ['#1A1D29', '#2A2D3A'],
+    gradientCharcoal: ['#2C2C54', '#40407A'],
+    
+    // Text colors
+    textPrimary: '#1A1D29',
+    textSecondary: '#6C7293',
+    textLight: '#A0A3BD',
     white: '#FFFFFF',
-    success: '#28a745',
-    danger: '#dc3545',
-    lightGray: '#f8f9fa',
-    darkGray: '#343a40',
-    successLight: '#e6ffe6',
-    dangerLight: '#ffe6e6',
+    background: '#F8F9FA',
+    
+    // Shadow
+    shadowColor: 'rgba(0, 0, 0, 0.08)',
+    shadowColorDark: 'rgba(0, 0, 0, 0.15)',
 };
 
 const formatCurrency = (amount) => {
@@ -29,184 +49,271 @@ const formatCurrency = (amount) => {
     return formattedAmount.replace(/VNĐ/g, '₫').replace(/₫/g, '₫').trim();
 };
 
-const SummaryCard = ({ title, totalRevenue, totalReports, change, value, icon, color, type, chartData, customCardWidth, isDailyReport }) => {
+const SummaryCard = ({ 
+    title, 
+    totalRevenue, 
+    totalReports, 
+    change, 
+    value, 
+    icon, 
+    color, 
+    type, 
+    chartData, 
+    customCardWidth, 
+    isDailyReport,
+    totalItems = 1 // Số lượng card trong layout
+}) => {
     const isIncrease = change > 0;
-    const changeColor = isIncrease ? COLORS.success : (change < 0 ? COLORS.danger : COLORS.secondary);
-    const changeBgColor = isIncrease ? COLORS.successLight : (change < 0 ? COLORS.dangerLight : COLORS.lightGray);
-    const changeIconName = isIncrease ? 'caret-up' : (change < 0 ? 'caret-down' : 'remove');
-    const changeText = `${Math.abs(change)}%`;
+    const changeColor = isIncrease ? COLORS.success : (change < 0 ? COLORS.danger : COLORS.textSecondary);
+    const changeIconName = isIncrease ? 'trending-up' : (change < 0 ? 'trending-down' : 'remove');
+    const changeText = change !== undefined ? `${Math.abs(change)}%` : '';
 
     let displayValue;
     let displayIcon = icon || "wallet-outline";
-    let displayColor = color || COLORS.primary;
+    let gradientColors = COLORS.gradientPurple;
+    let cardType = 'default';
 
     if (type === 'storeClients') {
         displayValue = value;
         displayIcon = icon || "people-outline";
-        displayColor = color || '#3498db';
+        gradientColors = COLORS.gradientBlue;
+        cardType = 'clients';
     } else if (type === 'actualRevenue') {
         displayValue = value.replace(/VNĐ/g, '₫').replace(/₫/g, '₫').trim();
-        displayIcon = icon || "cash-outline";
-        displayColor = color || COLORS.success;
-    }
-    else { // Default type, used for 'Tổng doanh thu cá nhân'
+        displayIcon = icon || "trending-up-outline";
+        gradientColors = COLORS.gradientGreen;
+        cardType = 'revenue';
+    } else {
         displayValue = formatCurrency(totalRevenue);
-        displayIcon = icon || "cash-outline";
-        displayColor = color || COLORS.primary;
+        displayIcon = icon || "wallet-outline";
+        gradientColors = COLORS.gradientCharcoal;
+        cardType = 'total';
     }
 
-    // ĐÃ LOẠI BỎ: Dữ liệu và cấu hình cho sparkline (LineChart)
-    // const dataForSparkline = chartData && chartData.datasets && chartData.datasets[0] && chartData.datasets[0].data.length > 0
-    //     ? {
-    //         labels: chartData.labels || [],
-    //         datasets: [{ data: chartData.datasets[0].data }]
-    //       }
-    //     : { labels: [], datasets: [{ data: [0, 1, 0.5, 2, 1.5, 3] }] };
-    //
-    // const sparklineChartConfig = {
-    //     backgroundColor: COLORS.white,
-    //     backgroundGradientFrom: COLORS.white,
-    //     backgroundGradientTo: COLORS.white,
-    //     decimalPlaces: 1,
-    //     color: (opacity = 1) => `rgba(26, 26, 26, ${opacity})`,
-    //     labelColor: (opacity = 1) => `rgba(85, 85, 85, ${opacity})`,
-    //     fillShadowGradient: displayColor,
-    //     fillShadowGradientOpacity: 0.2,
-    //     strokeWidth: 2,
-    //     propsForDots: {
-    //         r: "0",
-    //     },
-    //     propsForBackgroundLines: {
-    //         strokeDasharray: "",
-    //         strokeWidth: 0
-    //     },
-    //     propsForLabels: {
-    //         display: 'none'
-    //     },
-    //     color: (opacity = 1) => displayColor,
-    // };
+    // Tính toán width dựa trên số lượng items
+    let cardWidth;
+    if (customCardWidth) {
+        cardWidth = customCardWidth;
+    } else if (totalItems === 1) {
+        // 1 item: full width với margin
+        cardWidth = width - 32; // 16px margin mỗi bên
+    } else if (totalItems === 2) {
+        // 2 items: chia đều với spacing
+        cardWidth = (width - 48) / 2; // 16px margin ngoài + 16px gap giữa
+    } else {
+        // 3+ items: sử dụng logic cũ
+        cardWidth = (width - 40) / 2 - 8;
+    }
 
     return (
-        <View style={[styles.card, { width: customCardWidth || '100%' }]}>
-            {/* Header cho tiêu đề và LƯỢT KHÁCH */}
-            <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardTitleNew}>{title}</Text>
-                {totalReports !== undefined && (
-                    <Text style={styles.totalCustomersBadge}>
-                        Tổng lượt khách: {totalReports}
-                    </Text>
-                )}
-            </View>
-
-            {/* Icon chỉ báo xu hướng */}
-            {change !== undefined && (
-                <View style={styles.trendIndicator}>
-                    <Ionicons name={changeIconName} size={16} color={changeColor} />
-                    <View style={[styles.trendDot, { backgroundColor: changeColor }]} />
+        <View style={[styles.cardWrapper, { width: cardWidth }]}>
+            <LinearGradient
+                colors={gradientColors}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.gradientCard}
+            >
+                {/* Background Pattern */}
+                <View style={styles.backgroundPattern}>
+                    <View style={styles.circle1} />
+                    <View style={styles.circle2} />
+                    <View style={styles.circle3} />
                 </View>
-            )}
 
-            {/* Giá trị chính */}
-            <Text style={styles.cardValueNew}>{displayValue}</Text>
-
-            {/* Thẻ phần trăm thay đổi */}
-            {change !== undefined && (
-                <View style={[styles.changeBadge, { backgroundColor: changeBgColor }]}>
-                    <Text style={[styles.changeTextNew, { color: changeColor }]}>
-                        {changeText} vs kỳ trước
-                    </Text>
+                {/* Card Header */}
+                <View style={styles.cardHeader}>
+                    <View style={styles.iconWrapper}>
+                        <Ionicons name={displayIcon} size={24} color={COLORS.white} />
+                    </View>
+                    
+                    {totalReports !== undefined && (
+                        <View style={styles.reportsBadge}>
+                            <Text style={styles.reportsBadgeText}>{totalReports} Khách</Text>
+                        </View>
+                    )}
                 </View>
-            )}
 
-            {/* ĐÃ LOẠI BỎ: Phần render Sparkline (LineChart) */}
-            {/* {!isDailyReport && dataForSparkline.datasets[0].data.length > 1 && (
-                <LineChart
-                    data={dataForSparkline}
-                    width={styles.sparklineChart.width}
-                    height={styles.sparklineChart.height}
-                    chartConfig={sparklineChartConfig}
-                    bezier
-                    withVerticalLabels={false}
-                    withHorizontalLabels={false}
-                    withInnerLines={false}
-                    withOuterLines={false}
-                    fromZero={true}
-                    style={styles.sparklineChart}
-                />
-            )} */}
+                {/* Card Title */}
+                <Text style={styles.cardTitle} numberOfLines={2}>
+                    {title}
+                </Text>
+
+                {/* Main Value */}
+                <View style={styles.valueSection}>
+                    <Text style={styles.mainValue} numberOfLines={1} adjustsFontSizeToFit>
+                        {displayValue}
+                    </Text>
+                    
+                    {change !== undefined && (
+                        <View style={styles.changeIndicator}>
+                            <View style={[styles.changeBadge, { 
+                                backgroundColor: isIncrease ? 'rgba(0, 184, 148, 0.2)' : 'rgba(225, 112, 85, 0.2)'
+                            }]}>
+                                <Ionicons 
+                                    name={changeIconName} 
+                                    size={12} 
+                                    color={COLORS.white} 
+                                />
+                                <Text style={styles.changeText}>
+                                    {changeText}
+                                </Text>
+                            </View>
+                        </View>
+                    )}
+                </View>
+
+                {/* Bottom accent line */}
+                <View style={styles.accentLine} />
+            </LinearGradient>
+
+            {/* Glass effect overlay */}
+            <View style={styles.glassOverlay} />
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    card: {
-        backgroundColor: COLORS.white,
-        borderRadius: 8,
-        padding: 15,
-        marginBottom: 10,
-        marginTop: 10,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-        boxSizing: 'border-box',
+    cardWrapper: {
+        marginBottom: 5,
+        marginHorizontal: 7, // Tăng margin để tạo spacing đều
     },
-    cardHeaderRow: {
+    gradientCard: {
+        borderRadius: 18,
+        padding: 15,
+        minHeight: 155,
+        position: 'relative',
+        overflow: 'hidden',
+        shadowColor: COLORS.shadowColorDark,
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 8,
+    },
+    backgroundPattern: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        opacity: 0.1,
+    },
+    circle1: {
+        position: 'absolute',
+        top: -30,
+        right: -30,
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: COLORS.white,
+    },
+    circle2: {
+        position: 'absolute',
+        bottom: -20,
+        left: -20,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: COLORS.white,
+    },
+    circle3: {
+        position: 'absolute',
+        top: '50%',
+        right: -15,
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: COLORS.white,
+    },
+    cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 12,
+        zIndex: 2,
+    },
+    iconWrapper: {
+        width: 48,
+        height: 48,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
         alignItems: 'center',
-        marginBottom: 5,
+        justifyContent: 'center',
+        backdropFilter: 'blur(10px)',
     },
-    cardTitleNew: {
-        fontSize: 14,
-        color: COLORS.secondary,
-        fontWeight: '500',
+    reportsBadge: {
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+        borderRadius: 20,
+        backdropFilter: 'blur(10px)',
     },
-    totalCustomersBadge: { // New style for the badge
-        fontSize: 11, // Smaller font size for a badge
+    reportsBadgeText: {
+        fontSize: 12,
+        fontWeight: '700',
         color: COLORS.white,
-        backgroundColor: COLORS.primary, // Black background
-        paddingVertical: 4,
-        paddingHorizontal: 8,
-        borderRadius: 12, // Rounded corners for badge effect
-        fontWeight: 'bold', // Make it bold
-        overflow: 'hidden', // Ensure content stays within border radius
     },
-    trendIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    cardTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: COLORS.white,
+        opacity: 0.9,
+        lineHeight: 20,
+        zIndex: 2,
         marginBottom: 5,
     },
-    trendDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        marginLeft: 5,
+    valueSection: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        zIndex: 2,
     },
-    cardValueNew: {
+    mainValue: {
         fontSize: 20,
-        fontWeight: 'bold',
-        color: COLORS.primary,
+        fontWeight: '800',
+        color: COLORS.white,
         marginBottom: 8,
+        letterSpacing: -0.5,
+        textShadowColor: 'rgba(0, 0, 0, 0.2)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 2,
     },
-    changeBadge: {
-        borderRadius: 10,
-        paddingVertical: 3,
-        paddingHorizontal: 8,
+    changeIndicator: {
         alignSelf: 'flex-start',
     },
-    changeTextNew: {
-        fontSize: 12,
-        fontWeight: 'bold',
+    changeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backdropFilter: 'blur(10px)',
     },
-    // ĐÃ LOẠI BỎ: sparklineChart style
-    // sparklineChart: {
-    //     height: 40,
-    //     width: '100%',
-    //     marginTop: 10,
-    //     alignSelf: 'center',
-    // }
+    changeText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: COLORS.white,
+        marginLeft: 4,
+    },
+    accentLine: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 4,
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
+    },
+    glassOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
 });
 
 export default SummaryCard;

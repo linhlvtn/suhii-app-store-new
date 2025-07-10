@@ -388,17 +388,19 @@ const StoreScreen = () => {
         return (
             <TouchableWithoutFeedback
                 onPress={() => {
+                    // Chỉ chuyển đến màn hình chỉnh sửa nếu có thể chỉnh sửa
                     if (canEdit) {
                         handleEdit(item);
-                    } else if (item.imageUrl) {
-                        openImagePreview(item.imageUrl);
                     }
                 }}
-                disabled={!canEdit && !item.imageUrl}
+                disabled={!canEdit} // Disable nếu không thể chỉnh sửa
             >
                 <View style={styles.itemContainer}>
                     <View style={styles.itemContentWrapper}> 
-                        <View>
+                        <TouchableOpacity
+                            onPress={() => item.imageUrl && openImagePreview(item.imageUrl)}
+                            disabled={!item.imageUrl} // Disable nếu không có ảnh
+                        >
                             <Image
                                 source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/default-image.png')}
                                 style={styles.itemImage}
@@ -406,71 +408,75 @@ const StoreScreen = () => {
                             <View style={styles.statusIconOnImage}>
                                 <Ionicons name={statusInfo.icon} size={12} color={statusInfo.color} />
                             </View>
-                        </View>
+                        </TouchableOpacity>
                         <View style={styles.itemContent}>
                             <View style={styles.itemHeader}>
                                 <Text style={styles.serviceText} numberOfLines={2}>
                                     {item.service || ''}
                                 </Text>
-                                {userRole === 'employee' && (canEdit || canDelete) && (
-                                    <Menu>
-                                        <MenuTrigger style={styles.menuTrigger}>
-                                            <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
-                                        </MenuTrigger>
-                                        <MenuOptions customStyles={menuOptionsStyles}>
-                                            {canEdit && (
+                                <Text style={styles.priceContainer}>
+                                    <View style={styles.priceContainer}>
+                                        <Text style={styles.sharedPriceText}>
+                                            +{(item.price || 0).toLocaleString('vi-VN')}₫
+                                        </Text>
+                                        {/* {item.paymentMethod && (
+                                            <Text style={styles.paymentMethodText}>
+                                                ({item.paymentMethod === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'})
+                                            </Text>
+                                        )} */}
+                                    
+                                    {userRole === 'employee' && (canEdit || canDelete) && (
+                                        <Menu>
+                                            <MenuTrigger style={styles.menuTrigger}>
+                                                <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
+                                            </MenuTrigger>
+                                            <MenuOptions customStyles={menuOptionsStyles}>
+                                                {canEdit && (
+                                                    <MenuOption onSelect={() => handleEdit(item)}>
+                                                        <Text>Chỉnh sửa</Text>
+                                                    </MenuOption>
+                                                )}
+                                                {canEdit && canDelete && (
+                                                    <View style={styles.divider} />
+                                                )}
+                                                {canDelete && (
+                                                    <MenuOption onSelect={() => handleDelete(item.key)}>
+                                                        <Text style={{ color: 'red' }}>Xóa</Text>
+                                                    </MenuOption>
+                                                )}
+                                            </MenuOptions>
+                                        </Menu>
+                                    )}
+                                    {userRole === 'admin' && (
+                                        <Menu>
+                                            <MenuTrigger style={styles.menuTrigger}>
+                                                <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
+                                            </MenuTrigger>
+                                            <MenuOptions customStyles={menuOptionsStyles}>
                                                 <MenuOption onSelect={() => handleEdit(item)}>
                                                     <Text>Chỉnh sửa</Text>
                                                 </MenuOption>
-                                            )}
-                                            {canEdit && canDelete && (
                                                 <View style={styles.divider} />
-                                            )}
-                                            {canDelete && (
                                                 <MenuOption onSelect={() => handleDelete(item.key)}>
                                                     <Text style={{ color: 'red' }}>Xóa</Text>
                                                 </MenuOption>
-                                            )}
-                                        </MenuOptions>
-                                    </Menu>
-                                )}
-                                {userRole === 'admin' && (
-                                    <Menu>
-                                        <MenuTrigger style={styles.menuTrigger}>
-                                            <Ionicons name="ellipsis-vertical" size={20} color={COLORS.gray} />
-                                        </MenuTrigger>
-                                        <MenuOptions customStyles={menuOptionsStyles}>
-                                            <MenuOption onSelect={() => handleEdit(item)}>
-                                                <Text>Chỉnh sửa</Text>
-                                            </MenuOption>
-                                            <View style={styles.divider} />
-                                            <MenuOption onSelect={() => handleDelete(item.key)}>
-                                                <Text style={{ color: 'red' }}>Xóa</Text>
-                                            </MenuOption>
-                                        </MenuOptions>
-                                    </Menu>
-                                )}
-                            </View>
-                            <View style={styles.priceContainer}>
-                                <Text style={styles.sharedPriceText}>
-                                    {(item.price || 0).toLocaleString('vi-VN')}₫
+                                            </MenuOptions>
+                                        </Menu>
+                                    )}
+                                    </View>
                                 </Text>
-                                {item.paymentMethod && (
-                                    <Text style={styles.paymentMethodText}>
-                                        ({item.paymentMethod === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'})
-                                    </Text>
-                                )}
                             </View>
+                            
 
-                            {actualReceivedRevenueText && item.status === 'approved' && userRole === 'admin' ? (
+                            {/* {actualReceivedRevenueText && item.status === 'approved' && userRole === 'admin' ? (
                                 <View style={styles.infoRow}>
-                                    <Ionicons name="cash" size={16} color={COLORS.approved} />
-                                    <Text style={styles.infoText}>Thực nhận: {actualReceivedRevenueText}₫</Text>
+                                    <Ionicons name="cash" size={16} color={COLORS.gray} />
+                                    <Text style={styles.infoNote}>Thực nhận: <Text style={styles.infoText}>+{actualReceivedRevenueText}₫</Text></Text>
                                     {item.isOvertime && (
                                         <Text style={styles.overtimeText}>{`(+${displayOvertimeRate}%)`}</Text>
                                     )}
                                 </View>
-                            ) : null}
+                            ) : null} */}
 
                             <View style={styles.infoRow}>
                                 <Ionicons name="people-outline" size={16} color={COLORS.gray} />
@@ -522,9 +528,9 @@ const StoreScreen = () => {
         return (
             <View style={styles.sectionHeader}>
                 <Text style={styles.sectionHeaderText}>{section.title}</Text>
-                <Text style={styles.sectionRevenueText}>
-                    Doanh thu: {totalSectionRevenue.toLocaleString('vi-VN')}₫
-                </Text>
+                <View>
+                   <Text>Doanh thu:<Text style={styles.sectionRevenueText}> {totalSectionRevenue.toLocaleString('vi-VN')}₫</Text></Text>
+                </View>
             </View>
         );
     };
@@ -710,7 +716,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: COLORS.black,
     },
-    headerLogo: { width: 50, height: 40, borderRadius: 6 },
+    headerLogo: { width: 42, height: 42, borderRadius: 100, padding: 5, backgroundColor: COLORS.black },
     headerRightContainer: { flexDirection: 'row', alignItems: 'center', width: 100, justifyContent: 'flex-end' },
     headerButton: { width: 45, height: 45, justifyContent: 'center', alignItems: 'center' },
     filterBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, backgroundColor: COLORS.lightGray, borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
@@ -729,7 +735,7 @@ const styles = StyleSheet.create({
     listContainer: { paddingBottom: 80, backgroundColor: COLORS.white },
     sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, backgroundColor: '#f7f7f7', paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
     sectionHeaderText: { fontWeight: 'bold', fontSize: 16 },
-    sectionRevenueText: { fontWeight: '600', color: COLORS.gray },
+    sectionRevenueText: { fontWeight: '600', color: COLORS.rejected },
     
     // Đã cập nhật styles cho item và loại bỏ các style swipe cụ thể
     itemContainer: { 
@@ -747,16 +753,17 @@ const styles = StyleSheet.create({
         flexDirection: 'row', 
         flex: 1,
     },
-    itemImage: { width: 90, height: 90, borderRadius: 10, backgroundColor: COLORS.lightGray },
+    itemImage: { width: 60, height: 60, borderRadius: 8, backgroundColor: COLORS.lightGray },
     itemContent: { flex: 1, marginLeft: 12, justifyContent: 'center' },
-    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, },
-    serviceText: { fontSize: 16, fontWeight: '700', color: COLORS.black, flex: 1, marginRight: 5 },
-    priceContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, },
+    itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, },
+    serviceText: { fontSize: 15, fontWeight: '700', color: COLORS.black, flex: 1, marginRight: 5 },
+    priceContainer: { flexDirection: 'row', alignItems: 'center' },
     priceText: { fontSize: 16, fontWeight: '600', color: COLORS.rejected },
     sharedPriceText: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: 'bold',
-        color: COLORS.rejected,
+        color: COLORS.green,
+        marginRight: 3,
     },
     originalPriceNote: {
         fontSize: 12,

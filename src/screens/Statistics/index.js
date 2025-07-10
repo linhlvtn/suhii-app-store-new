@@ -477,7 +477,8 @@ const AdminStatisticsDashboard = () => {
                                 change={storeSummary.revenueChange}
                                 type="storeSummary"
                                 chartData={chartData}
-                                isDailyReport={isDailyReport}
+                                isDailyReport={isDailyReport} 
+                                totalItems={2}
                             />
                             <SummaryCard
                                 title="Tổng Lượt khách"
@@ -487,7 +488,8 @@ const AdminStatisticsDashboard = () => {
                                 color="#3498db"
                                 type="storeClients"
                                 chartData={clientChartData}
-                                isDailyReport={isDailyReport}
+                                isDailyReport={isDailyReport} 
+                                totalItems={2}
                             />
                         </View>
 
@@ -635,8 +637,9 @@ const styles = StyleSheet.create({
     summaryCardsRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        paddingHorizontal: 20, 
+        paddingHorizontal: 10, 
         marginBottom: 0,
+        width: '100%',
     },
 
     leaderboardContainer: {
@@ -658,7 +661,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: COLORS.primary,
         marginTop: 15,
-        marginBottom: 10,
+        marginBottom: 15,
         paddingHorizontal: 20 
     },
     noDataContainer: {

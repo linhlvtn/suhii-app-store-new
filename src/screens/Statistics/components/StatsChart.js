@@ -65,17 +65,18 @@ const StatsChart = ({ data, chartType = 'bar', title }) => {
         return Math.ceil(max * 1.2); // Thêm 20% buffer
     }, [chartData, isDataValid]);
 
-    // Cấu hình chung cho cả hai loại biểu đồ
+    // Cấu hình chung cho cả hai loại biểu đồ - ẨN TRỤC Y
     const commonChartProps = {
         width: minScrollWidth - 20,
         height: 220,
         maxValue,
         noOfSections: 5,
-        yAxisTextStyle: { color: COLORS.secondary, fontSize: 11 },
-        yAxisColor: COLORS.secondary,
+        // ẨN TRỤC Y VÀ LABELS
+        hideYAxisText: true,        // Ẩn text trục Y
+        yAxisColor: 'transparent',  // Ẩn đường trục Y
+        hideAxesAndRules: false,    // Vẫn giữ rules ngang
         xAxisLabelTextStyle: { color: COLORS.secondary, fontSize: 10 },
         xAxisColor: COLORS.secondary,
-        yAxisLabelSuffix: 'M₫',
         hideRules: false,
         rulesColor: COLORS.ruleColor,
         rulesType: 'solid',

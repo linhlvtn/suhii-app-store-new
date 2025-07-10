@@ -1,9 +1,9 @@
 // src/screens/EmployeeStatisticsScreen.js
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'; 
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Alert, Platform, FlatList, Image } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, orderBy, limit, startAfter } from 'firebase/firestore';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +15,7 @@ import StatsChart from './Statistics/components/StatsChart';
 import ServicePieChart from './Statistics/components/ServicePieChart';
 
 import moment from 'moment';
-import 'moment/locale/vi'; 
+import 'moment/locale/vi';
 moment.locale('vi');
 
 LocaleConfig.locales['vi'] = { monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'], dayNames: ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'], dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'], today: 'Hôm nay' };
@@ -34,8 +34,8 @@ const COLORS = {
     rejected: '#D32F2F',
 };
 
-const getDateRange = (period, baseDate = null) => { 
-    const date = baseDate ? new Date(baseDate) : new Date(); 
+const getDateRange = (period, baseDate = null) => {
+    const date = baseDate ? new Date(baseDate) : new Date();
     let startDate, endDate;
 
     switch (period) {
@@ -45,21 +45,21 @@ const getDateRange = (period, baseDate = null) => {
             endDate = new Date(date);
             break;
         case 'week':
-            const dayOfWeek = date.getDay(); 
-            const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); 
+            const dayOfWeek = date.getDay();
+            const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
             startDate = new Date(date.setDate(diff));
             endDate = new Date(startDate);
-            endDate.setDate(startDate.getDate() + 6); 
+            endDate.setDate(startDate.getDate() + 6);
             break;
         case 'month':
             startDate = new Date(date.getFullYear(), date.getMonth(), 1);
-            endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0); 
+            endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
             break;
         case 'year':
             startDate = new Date(date.getFullYear(), 0, 1);
-            endDate = new Date(date.getFullYear(), 11, 31); 
+            endDate = new Date(date.getFullYear(), 11, 31);
             break;
-        default: 
+        default:
             startDate = new Date(date);
             endDate = new Date(date);
     }
@@ -78,14 +78,14 @@ const getDynamicTitle = (period, date) => {
             case 'today':
                 return `Hôm nay, ${moment(now).format('DD/MM/YYYY')}`;
             case 'week': {
-                const startOfWeek = getDateRange('week', date).startDate.toDate(); 
-                const endOfWeek = getDateRange('week', date).endDate.toDate(); 
+                const startOfWeek = getDateRange('week', date).startDate.toDate();
+                const endOfWeek = getDateRange('week', date).endDate.toDate();
                 return `Tuần (${moment(startOfWeek).format('DD/MM')} - ${moment(endOfWeek).format('DD/MM')})`;
             }
             case 'month':
-                return `Tháng ${moment(date).format('MM,YYYY')}`; 
+                return `Tháng ${moment(date).format('MM,YYYY')}`;
             case 'year':
-                return `Năm ${moment(date).format('YYYY')}`; 
+                return `Năm ${moment(date).format('YYYY')}`;
             default:
                 return 'Tổng quan';
         }
@@ -142,27 +142,37 @@ const initializeDailyData = (startDate, endDate, period) => {
 };
 
 const EmployeeStatisticsScreen = () => {
-    const { userRole, user: authUser, users } = useAuth(); 
+    const { userRole, user: authUser, users } = useAuth();
     const navigation = useNavigation();
     const route = useRoute();
-    
+
     const employeeId = route.params?.employeeId || authUser?.uid;
     const employeeName = route.params?.employeeName || (authUser?.displayName || authUser?.email?.split('@')[0]) || 'Của tôi';
 
-    const [reports, setReports] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // State hiện có
+    const [reports, setReports] = useState([]); // Giữ lại cho các biểu đồ và tổng quan
+    const [loading, setLoading] = useState(true); // Loading chung cho toàn màn hình
     const [selectedPeriod, setSelectedPeriod] = useState('month');
-    const [selectedDate, setSelectedDate] = useState(new Date()); 
+    const [selectedDate, setSelectedDate] = useState(new Date());
     const [isDatePickerVisible, setDatePickerVisible] = useState(false);
-
-    // totalRevenue và totalReports nằm trong summaryData, không phải state riêng
     const [actualRevenue, setActualRevenue] = useState(0);
-    const [summaryData, setSummaryData] = useState({ totalRevenue: 0, totalReports: 0 }); 
-
+    const [summaryData, setSummaryData] = useState({ totalRevenue: 0, totalReports: 0 });
     const [chartData, setChartData] = useState({ labels: [], datasets: [{ data: [] }] });
     const [pieChartData, setPieChartData] = useState([]);
-    const [employeeRankings, setEmployeeRankings] = useState([]); // Giữ lại nếu có thể dùng cho tương lai
+    const [employeeRankings, setEmployeeRankings] = useState([]);
     const [personalChartData, setPersonalChartData] = useState({ labels: [], datasets: [{ data: [] }] });
+
+    // Các state MỚI cho phần hiển thị hóa đơn chi tiết
+    const [latestReportForList, setLatestReportForList] = useState(null);
+    const [olderReportsForList, setOlderReportsForList] = useState([]);
+    const [loadingLatestReportForList, setLoadingLatestReportForList] = useState(false);
+    const [loadingMoreReportsForList, setLoadingMoreReportsForList] = useState(false);
+    const [hasMoreReportsForList, setHasMoreReportsForList] = useState(true);
+    const [lastVisibleReportDoc, setLastVisibleReportDoc] = useState(null); // Document snapshot cuối cùng để pagination
+
+    // State cho Modal xem ảnh
+    const [isImageModalVisible, setImageModalVisible] = useState(false);
+    const [selectedImageUrl, setSelectedImageUrl] = useState(null);
 
 
     const handleBackButtonPress = () => {
@@ -189,12 +199,12 @@ const EmployeeStatisticsScreen = () => {
                 where("createdAt", "<=", endDate),
                 orderBy("createdAt", "asc")
             );
-            
+
             const timeoutPromise = new Promise((resolve, reject) => {
                 const id = setTimeout(() => {
                     clearTimeout(id);
                     reject(new Error("Firebase query timed out after 15 seconds. This might indicate a missing index or a very large dataset."));
-                }, 15000); 
+                }, 15000);
             });
 
             const querySnapshot = await Promise.race([
@@ -216,22 +226,22 @@ const EmployeeStatisticsScreen = () => {
 
             let currentTotalRevenue = 0;
             let currentCalculatedActualRevenue = 0;
-            const dailyRevenueForChart = initializeDailyData(startDate.toDate(), endDate.toDate(), period); 
+            const dailyRevenueForChart = initializeDailyData(startDate.toDate(), endDate.toDate(), period);
             const serviceCounts = {};
 
-            const currentUsers = users || []; 
+            const currentUsers = users || [];
             const employeeRevenueMap = new Map(currentUsers.map(u => [u.id, { total: 0, personal: 0, shared: 0, commission: 0, name: u.displayName || u.email.split('@')[0] }]));
 
             fetchedReports.forEach(report => {
                 const numParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
                 const reportPrice = report.price || 0;
 
-                const commissionRate = report.commissionRate !== undefined ? report.commissionRate : 0.10; 
-                const overtimeRate = report.overtimeRate !== undefined ? report.overtimeRate : 0.30;   
+                const commissionRate = report.commissionRate !== undefined ? report.commissionRate : 0.10;
+                const overtimeRate = report.overtimeRate !== undefined ? report.overtimeRate : 0.30;
 
                 let revenuePerThisEmployeeActual = 0;
                 if (report.status === 'approved') {
-                    const personalShareAmount = reportPrice / numParticipants; 
+                    const personalShareAmount = reportPrice / numParticipants;
 
                     if (report.isOvertime) {
                         if (report.userId === employeeId || report.partnerId === employeeId) {
@@ -239,15 +249,15 @@ const EmployeeStatisticsScreen = () => {
                         }
                     } else {
                         if (report.userId === employeeId || report.partnerId === employeeId) {
-                            revenuePerThisEmployeeActual = personalShareAmount * commissionRate; 
+                            revenuePerThisEmployeeActual = personalShareAmount * commissionRate;
                         }
                     }
-                    currentCalculatedActualRevenue += revenuePerThisEmployeeActual; 
+                    currentCalculatedActualRevenue += revenuePerThisEmployeeActual;
 
                     const personalRevenueShare = (report.userId === employeeId || report.partnerId === employeeId) ? reportPrice / numParticipants : 0;
-                    currentTotalRevenue += personalRevenueShare; 
+                    currentTotalRevenue += personalRevenueShare;
 
-                    const dateKey = getFormattedDateKey(report.createdAt, period); 
+                    const dateKey = getFormattedDateKey(report.createdAt, period);
                     if (dailyRevenueForChart[dateKey] !== undefined) {
                         dailyRevenueForChart[dateKey] += personalRevenueShare / 1000000;
                     }
@@ -264,16 +274,16 @@ const EmployeeStatisticsScreen = () => {
                     report.participantIds.forEach(participantId => {
                         const employeeStats = employeeRevenueMap.get(participantId);
                         if (employeeStats) {
-                            const numReportParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1; 
+                            const numReportParticipants = (report.participantIds && Array.isArray(report.participantIds) && report.participantIds.length > 0) ? report.participantIds.length : 1;
                             const pricePerParticipant = (report.price || 0) / numReportParticipants;
 
-                            employeeStats.total += (report.price || 0); 
+                            employeeStats.total += (report.price || 0);
                             if (numReportParticipants > 1) {
                                 employeeStats.shared += pricePerParticipant;
                             } else {
                                 employeeStats.personal += pricePerParticipant;
                             }
-                            employeeStats.commission += pricePerParticipant * (report.isOvertime ? overtimeRate : commissionRate); 
+                            employeeStats.commission += pricePerParticipant * (report.isOvertime ? overtimeRate : commissionRate);
                             employeeRevenueMap.set(participantId, employeeStats);
                         }
                     });
@@ -285,7 +295,7 @@ const EmployeeStatisticsScreen = () => {
                 totalRevenue: currentTotalRevenue || 0,
                 totalReports: fetchedReports.filter(r => r.status === 'approved').length || 0,
             });
-            setActualRevenue(currentCalculatedActualRevenue || 0); 
+            setActualRevenue(currentCalculatedActualRevenue || 0);
             setChartData({
                 labels: Object.keys(dailyRevenueForChart),
                 datasets: [{ data: Object.values(dailyRevenueForChart) }],
@@ -305,17 +315,17 @@ const EmployeeStatisticsScreen = () => {
             })));
 
             const sortedEmployeeRankings = Array.from(employeeRevenueMap.values())
-                .sort((a, b) => b.commission - a.commission); 
-            setEmployeeRankings(sortedEmployeeRankings); 
+                .sort((a, b) => b.commission - a.commission);
+            setEmployeeRankings(sortedEmployeeRankings);
 
         } catch (error) {
             console.error("Lỗi khi tải hóa đơn thống kê cá nhân (trong fetchEmployeeStatsData):", error);
             Alert.alert("Lỗi", `Không thể tải dữ liệu thống kê cá nhân: ${error.message || error}`);
-            throw error; 
+            throw error;
         } finally {
             setLoading(false);
         }
-    }, [employeeId, users]); 
+    }, [employeeId, users]);
 
     const loadStats = useCallback(async (period, date) => {
         setLoading(true);
@@ -328,41 +338,176 @@ const EmployeeStatisticsScreen = () => {
         }
     }, [fetchEmployeeStatsData]);
 
+    // Hàm MỚI: Tải hóa đơn mới nhất cho danh sách chi tiết
+    const fetchLatestReportForList = useCallback(async () => {
+        if (!employeeId) {
+            setLatestReportForList(null);
+            setOlderReportsForList([]);
+            setLastVisibleReportDoc(null);
+            setHasMoreReportsForList(false); // No employee, no reports
+            return;
+        }
+
+        setLoadingLatestReportForList(true);
+        try {
+            const { startDate, endDate } = getDateRange(selectedPeriod, selectedDate);
+            const reportsRef = collection(db, 'reports');
+
+            // Query for the single latest report
+            let qLatest = query(
+                reportsRef,
+                where("participantIds", "array-contains", employeeId),
+                where("createdAt", ">=", startDate),
+                where("createdAt", "<=", endDate),
+                orderBy('createdAt', 'desc'),
+                limit(1)
+            );
+
+            const latestSnapshot = await getDocs(qLatest);
+            if (!latestSnapshot.empty) {
+                const latest = { key: latestSnapshot.docs[0].id, ...latestSnapshot.docs[0].data(), createdAt: latestSnapshot.docs[0].data().createdAt.toDate() };
+                setLatestReportForList(latest);
+                setLastVisibleReportDoc(latestSnapshot.docs[0]); // Store the actual document snapshot
+
+                // NEW: Check if there's at least one more report AFTER the latest one
+                const qCheckMore = query(
+                    reportsRef,
+                    where("participantIds", "array-contains", employeeId),
+                    where("createdAt", ">=", startDate),
+                    where("createdAt", "<=", endDate),
+                    orderBy('createdAt', 'desc'),
+                    startAfter(latestSnapshot.docs[0]), // Start after the latest report
+                    limit(1) // Just fetch one to see if it exists
+                );
+                const checkMoreSnapshot = await getDocs(qCheckMore);
+                setHasMoreReportsForList(!checkMoreSnapshot.empty); // If checkMoreSnapshot is not empty, then there are more reports
+            } else {
+                setLatestReportForList(null);
+                setLastVisibleReportDoc(null);
+                setHasMoreReportsForList(false); // No reports found at all
+            }
+            setOlderReportsForList([]); // Always clear older reports on new latest fetch
+        } catch (error) {
+            console.error("Lỗi khi tải hóa đơn mới nhất cho danh sách:", error);
+            setLatestReportForList(null);
+            setOlderReportsForList([]);
+            setLastVisibleReportDoc(null);
+            setHasMoreReportsForList(false);
+        } finally {
+            setLoadingLatestReportForList(false);
+        }
+    }, [employeeId, selectedPeriod, selectedDate]);
+
+    // Hàm MỚI: Tải thêm các hóa đơn cũ hơn cho danh sách chi tiết
+    const fetchOlderReportsForList = useCallback(async () => {
+        if (!employeeId || loadingMoreReportsForList || !hasMoreReportsForList) {
+            return; // Stop if no employee, already loading, or no more data
+        }
+        // If there's no lastVisibleReportDoc, it means either no latest report or no more data to fetch.
+        // We only proceed if lastVisibleReportDoc is set (meaning we have a starting point).
+        if (!lastVisibleReportDoc) {
+            setHasMoreReportsForList(false); // Ensure no more reports flag is set if we somehow get here without a starting doc
+            return;
+        }
+
+        setLoadingMoreReportsForList(true);
+        try {
+            const { startDate, endDate } = getDateRange(selectedPeriod, selectedDate);
+            const reportsRef = collection(db, 'reports');
+
+            let q = query(
+                reportsRef,
+                where("participantIds", "array-contains", employeeId),
+                where("createdAt", ">=", startDate),
+                where("createdAt", "<=", endDate),
+                orderBy('createdAt', 'desc'),
+                startAfter(lastVisibleReportDoc), // Use the actual document snapshot
+                limit(15)
+            );
+
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                const newReports = querySnapshot.docs.map(doc => ({ key: doc.id, ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
+                setOlderReportsForList(prev => [...prev, ...newReports]);
+                setLastVisibleReportDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
+                setHasMoreReportsForList(querySnapshot.docs.length === 15);
+            } else {
+                setHasMoreReportsForList(false);
+            }
+        } catch (error) {
+            console.error("Lỗi khi tải thêm hóa đơn cho danh sách:", error);
+            setHasMoreReportsForList(false);
+        } finally {
+            setLoadingMoreReportsForList(false);
+        }
+    }, [employeeId, selectedPeriod, selectedDate, hasMoreReportsForList, lastVisibleReportDoc, loadingMoreReportsForList]);
+
+
+    // Hàm MỚI: Mở và đóng modal xem ảnh
+    const openImagePreview = (url) => {
+        setSelectedImageUrl(url);
+        setImageModalVisible(true);
+    };
+
+    const closeImagePreview = () => {
+        setImageModalVisible(false);
+        setSelectedImageUrl(null);
+    };
+
     useEffect(() => {
         if (authUser && (userRole === 'employee' || employeeId)) {
-            loadStats(selectedPeriod, selectedDate);
+            loadStats(selectedPeriod, selectedDate); // Load charts and summary
+            fetchLatestReportForList(); // Load the single latest report
+        } else {
+            // Reset all states if not authorized or no employee selected
+            setReports([]);
+            setLoading(true);
+            setActualRevenue(0);
+            setSummaryData({ totalRevenue: 0, totalReports: 0 });
+            setChartData({ labels: [], datasets: [{ data: [] }] });
+            setPieChartData([]);
+            setEmployeeRankings([]);
+            setPersonalChartData({ labels: [], datasets: [{ data: [] }] });
+
+            setLatestReportForList(null);
+            setOlderReportsForList([]);
+            setLoadingLatestReportForList(false);
+            setLoadingMoreReportsForList(false);
+            setHasMoreReportsForList(false);
+            setLastVisibleReportDoc(null);
         }
-    }, [loadStats, authUser, employeeId, userRole, selectedPeriod, selectedDate]); 
+    }, [loadStats, authUser, employeeId, userRole, selectedPeriod, selectedDate, fetchLatestReportForList]);
+
 
     const onDayPress = (day) => {
-        setDatePickerVisible(false); 
+        setDatePickerVisible(false);
         const selectedMoment = moment(day.dateString);
         let newDate;
 
         if (selectedPeriod === 'week') {
-            newDate = selectedMoment.startOf('isoWeek').toDate(); 
-        } else { 
+            newDate = selectedMoment.startOf('isoWeek').toDate();
+        } else {
             newDate = selectedMoment.toDate();
         }
         setSelectedDate(newDate);
     };
 
     const onMonthChange = (monthValue) => {
-        setDatePickerVisible(false); 
-        const newDate = new Date(selectedDate.getFullYear(), monthValue - 1, 1); 
+        setDatePickerVisible(false);
+        const newDate = new Date(selectedDate.getFullYear(), monthValue - 1, 1);
         setSelectedDate(newDate);
     };
 
     const onYearChange = (yearValue) => {
-        setDatePickerVisible(false); 
-        const newDate = new Date(yearValue, selectedDate.getMonth(), 1); 
+        setDatePickerVisible(false);
+        const newDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
         setSelectedDate(newDate);
     };
 
     const handleFilterChange = useCallback((period) => {
         setSelectedPeriod(period);
         if (period !== 'custom') {
-            setSelectedDate(new Date()); 
+            setSelectedDate(new Date());
         }
     }, []);
 
@@ -373,11 +518,11 @@ const EmployeeStatisticsScreen = () => {
         return `${year}-${month}-${day}`;
     };
 
-    const todayMoment = useMemo(() => moment(), []); // <-- Đã thêm định nghĩa todayMoment
-    const minDateForCalendar = useMemo(() => todayMoment.clone().subtract(30, 'days').format('YYYY-MM-DD'), [todayMoment]); // <-- Đã sửa
-    const maxDateForCalendar = useMemo(() => todayMoment.format('YYYY-MM-DD'), [todayMoment]); // <-- Đã sửa
+    const todayMoment = useMemo(() => moment(), []);
+    const minDateForCalendar = useMemo(() => todayMoment.clone().subtract(30, 'days').format('YYYY-MM-DD'), [todayMoment]);
+    const maxDateForCalendar = useMemo(() => todayMoment.format('YYYY-MM-DD'), [todayMoment]);
 
-    const years = useMemo(() => { 
+    const years = useMemo(() => {
         return Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
     }, []);
 
@@ -388,28 +533,28 @@ const EmployeeStatisticsScreen = () => {
             rejected: { icon: 'close-circle', color: COLORS.rejected }
         };
         const statusInfo = statusMap[item.status] || { icon: 'help-circle', color: COLORS.secondary };
-        
+
         const participants = [];
         if (item.employeeName) participants.push(item.employeeName);
         if (item.partnerName) participants.push(item.partnerName);
         const participantText = participants.length > 0 ? participants.join(' & ') : 'N/A';
 
         let actualReceivedRevenueText = null;
-        if (item.status === 'approved') { 
+        if (item.status === 'approved') {
              const numParticipants = (item.participantIds && Array.isArray(item.participantIds) && item.participantIds.length > 0) ? item.participantIds.length : 1;
              const reportPrice = item.price || 0;
              let actualPerReport = 0;
 
-             const commissionRate = item.commissionRate !== undefined ? item.commissionRate : 0.10; 
-             const overtimeRate = item.overtimeRate !== undefined ? item.overtimeRate : 0.30;   
+             const commissionRate = item.commissionRate !== undefined ? item.commissionRate : 0.10;
+             const overtimeRate = item.overtimeRate !== undefined ? item.overtimeRate : 0.30;
 
              if (item.userId === employeeId || item.partnerId === employeeId) {
-                 const personalShareAmount = reportPrice / numParticipants; 
+                 const personalShareAmount = reportPrice / numParticipants;
 
                  if (item.isOvertime) {
                      actualPerReport = reportPrice * overtimeRate;
                  } else {
-                     actualPerReport = personalShareAmount * commissionRate; 
+                     actualPerReport = personalShareAmount * commissionRate;
                  }
              }
 
@@ -424,12 +569,15 @@ const EmployeeStatisticsScreen = () => {
             year: 'numeric'
         }) : 'Không rõ';
 
-        const displayOvertimeRate = item.overtimeRate !== undefined ? (item.overtimeRate * 100).toFixed(0) : '30'; 
+        const displayOvertimeRate = item.overtimeRate !== undefined ? (item.overtimeRate * 100).toFixed(0) : '30';
 
         return (
             <TouchableWithoutFeedback>
                 <View style={styles.reportItemContainer}>
-                    <View> 
+                    <TouchableOpacity
+                        onPress={() => item.imageUrl && openImagePreview(item.imageUrl)}
+                        disabled={!item.imageUrl}
+                    >
                         <Image
                             source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/default-image.png')}
                             style={styles.reportItemImage}
@@ -437,8 +585,8 @@ const EmployeeStatisticsScreen = () => {
                         <View style={styles.reportStatusIconOnImage}>
                             <Ionicons name={statusInfo.icon} size={13} color={statusInfo.color} />
                         </View>
-                    </View>
-                    
+                    </TouchableOpacity>
+
                     <View style={styles.reportItemContent}>
                         <View style={styles.reportItemHeaderInner}>
                             <Text style={styles.reportServiceText} numberOfLines={2}>
@@ -446,16 +594,16 @@ const EmployeeStatisticsScreen = () => {
                             </Text>
                             <Text style={styles.reportDateText}>{formattedCreationDate}</Text>
                         </View>
-                        
+
                         <View style={styles.reportPriceContainer}>
                             <Text style={styles.reportPriceText}>
                                 {(item.price || 0).toLocaleString('vi-VN')}₫
                             </Text>
                             {item.isOvertime && (
-                                <Text style={styles.reportOvertimeText}>{`(+${displayOvertimeRate}%)`}</Text> 
+                                <Text style={styles.reportOvertimeText}>{`(+${displayOvertimeRate}%)`}</Text>
                             )}
                         </View>
-                        
+
                         {actualReceivedRevenueText && userRole === 'admin' ? (
                             <View style={styles.reportInfoRow}>
                                 <Ionicons name="cash" size={16} color={COLORS.success} />
@@ -464,14 +612,14 @@ const EmployeeStatisticsScreen = () => {
                                 </Text>
                             </View>
                         ) : null}
-                        
+
                         <View style={styles.reportInfoRow}>
                             <Ionicons name="people-outline" size={16} color={COLORS.secondary} />
                             <Text style={styles.reportInfoText}>
                                 {participantText}
                             </Text>
                         </View>
-                        
+
                         {item.note && typeof item.note === 'string' && item.note.trim() !== '' && (
                             <View style={styles.reportInfoRow}>
                                 <Ionicons name="document-text-outline" size={16} color={COLORS.secondary} />
@@ -484,7 +632,7 @@ const EmployeeStatisticsScreen = () => {
                 </View>
             </TouchableWithoutFeedback>
         );
-    }, [employeeId, userRole]); 
+    }, [employeeId, userRole, openImagePreview]);
 
     return (
         <View style={styles.container}>
@@ -495,23 +643,23 @@ const EmployeeStatisticsScreen = () => {
                             <View style={styles.datePickerContent}>
                                 {selectedPeriod === 'custom' || selectedPeriod === 'today' || selectedPeriod === 'week' ? (
                                     <Calendar
-                                        current={moment(selectedDate).format('YYYY-MM-DD')} 
+                                        current={moment(selectedDate).format('YYYY-MM-DD')}
                                         onDayPress={onDayPress}
                                         markedDates={{
-                                            [moment(selectedDate).format('YYYY-MM-DD')]: { 
+                                            [moment(selectedDate).format('YYYY-MM-DD')]: {
                                                 selected: true,
                                                 disableTouchEvent: true,
                                                 selectedColor: COLORS.primary
                                             }
                                         }}
-                                        minDate={minDateForCalendar} 
-                                        maxDate={maxDateForCalendar} 
+                                        minDate={minDateForCalendar}
+                                        maxDate={maxDateForCalendar}
                                     />
                                 ) : selectedPeriod === 'month' ? (
                                     <View>
                                         <Text style={styles.pickerTitle}>Chọn tháng</Text>
                                         <Picker
-                                            selectedValue={selectedDate.getMonth() + 1} 
+                                            selectedValue={selectedDate.getMonth() + 1}
                                             onValueChange={(itemValue) => onMonthChange(itemValue)}
                                             style={styles.picker}
                                             itemStyle={styles.pickerItem}
@@ -541,6 +689,28 @@ const EmployeeStatisticsScreen = () => {
                     </View>
                 </TouchableWithoutFeedback>
             </Modal>
+
+            {/* Modal xem ảnh */}
+            <Modal
+                visible={isImageModalVisible}
+                transparent={true}
+                onRequestClose={closeImagePreview}
+            >
+                <View style={styles.imageModalContainer}>
+                    <TouchableOpacity
+                        style={styles.imageModalCloseButton}
+                        onPress={closeImagePreview}
+                    >
+                        <Ionicons name="close-circle" size={40} color="white" />
+                    </TouchableOpacity>
+                    <Image
+                        source={{ uri: selectedImageUrl }}
+                        style={styles.fullscreenImage}
+                        resizeMode="contain"
+                    />
+                </View>
+            </Modal>
+
             <View style={styles.header}>
                 <TouchableOpacity onPress={handleBackButtonPress} style={styles.backButton}>
                     <Ionicons name="arrow-back-outline" size={28} color={COLORS.primary} />
@@ -560,12 +730,13 @@ const EmployeeStatisticsScreen = () => {
                         <Ionicons name="calendar-outline" size={22} color={COLORS.secondary} style={{ marginLeft: 8 }}/>
                     </TouchableOpacity>
                 </View>
-                <TimeFilterSegment 
-                    activeFilter={selectedPeriod} 
-                    onFilterChange={handleFilterChange} 
+                <TimeFilterSegment
+                    activeFilter={selectedPeriod}
+                    onFilterChange={handleFilterChange}
                     loading={loading}
                 />
-                
+
+                {/* Phần hiển thị tổng quan và biểu đồ hiện có */}
                 {loading ? (
                     <View style={styles.simpleLoadingContainer}>
                         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -574,26 +745,28 @@ const EmployeeStatisticsScreen = () => {
                 ) : (
                     <>
                         <View style={styles.summaryCardWrapper}>
-                            <SummaryCard
+                            <SummaryCard 
+                                style={styles.summaryCardWrapperItem}
                                 title="Doanh thu cá nhân"
                                 totalRevenue={summaryData.totalRevenue}
-                                totalReports={summaryData.totalReports} 
-                                type="employeeSummary"
+                                totalReports={summaryData.totalReports}
+                                type="employeeSummary" totalItems={userRole === 'admin' ? 2 : 1}
                             />
-                        </View>
 
-                        {userRole === 'admin' && (
-                            <View style={styles.summaryCardWrapper}>
-                                <SummaryCard
-                                    title="Doanh thu thực nhận"
+                            {userRole === 'admin' && (
+                                <SummaryCard 
+                                    style={styles.summaryCardWrapperItem}
+                                    title="Thực nhận"
                                     value={`${actualRevenue.toLocaleString('vi-VN')}₫`}
                                     description="Dự kiến hoa hồng + thưởng ngoài giờ"
-                                    type="actualRevenue"
+                                    type="actualRevenue" 
+                                    totalItems={2}
                                 />
-                            </View>
-                        )}
+                            )}
+                        </View>
 
-                        {/* ẨN BIỂU ĐỒ DOANH THU NẾU LÀ NGÀY HOẶC TUẦN */}
+                       
+
                         {(selectedPeriod === 'month' || selectedPeriod === 'year') && (
                             <StatsChart
                                 data={personalChartData}
@@ -603,32 +776,63 @@ const EmployeeStatisticsScreen = () => {
                             />
                         )}
 
-                        <ServicePieChart 
+                        <ServicePieChart
                             data={pieChartData}
                             title="Tỷ lệ Dịch vụ đã thực hiện"
                             style={styles.chartCardMargin}
                         />
 
-                        {reports.length > 0 ? (
-                            <View style={styles.reportsListSection}>
-                                <Text style={styles.reportsListTitle}>Danh sách hóa đơn trong kỳ</Text>
+                        {/* PHẦN HIỂN THỊ HÓA ĐƠN TRONG KỲ MỚI */}
+                        <View style={styles.reportsListSection}>
+                            <Text style={styles.reportsListTitle}>Doanh thu trong kỳ</Text>
+                            {loadingLatestReportForList ? (
+                                <View style={styles.loadingReportsList}>
+                                    <ActivityIndicator size="small" color={COLORS.primary} />
+                                    <Text style={styles.loadingReportsText}>Đang tải hóa đơn mới nhất...</Text>
+                                </View>
+                            ) : latestReportForList ? (
+                                <View>
+                                    {renderReportItem({ item: latestReportForList })}
+                                </View>
+                            ) : (
+                                <View style={styles.emptyReportsContainerForList}>
+                                    <Text style={styles.emptyReportsText}>Không có hóa đơn nào trong kỳ này.</Text>
+                                </View>
+                            )}
+
+                            {olderReportsForList.length > 0 && (
                                 <FlatList
-                                    data={reports}
-                                    keyExtractor={item => item.id}
+                                    data={olderReportsForList}
+                                    keyExtractor={item => item.key}
                                     renderItem={renderReportItem}
-                                    scrollEnabled={false}
+                                    scrollEnabled={false} // Quan trọng: Để ScrollView cha quản lý cuộn
                                     ItemSeparatorComponent={() => <View style={styles.reportSeparator} />}
-                                    initialNumToRender={10} 
-                                    maxToRenderPerBatch={5} 
-                                    updateCellsBatchingPeriod={100} 
-                                    removeClippedSubviews={true} 
                                 />
-                            </View>
-                        ) : (
-                            <View style={styles.emptyReportsContainer}>
-                                <Text style={styles.emptyReportsText}>Không có hóa đơn nào trong kỳ này.</Text>
-                            </View>
-                        )}
+                            )}
+
+                            {/* Logic hiển thị nút Xem thêm: chỉ hiện khi có dữ liệu nhiều hơn 1 hóa đơn và chưa tải hết */}
+                            {hasMoreReportsForList && !loadingMoreReportsForList && (
+                                <TouchableOpacity
+                                    style={styles.loadMoreButton}
+                                    onPress={fetchOlderReportsForList}
+                                    disabled={loadingMoreReportsForList}
+                                >
+                                    <Text style={styles.loadMoreText}>Xem thêm</Text>
+                                    <Ionicons name="chevron-down-outline" size={16} color={COLORS.primary} style={{ marginLeft: 5 }} />
+                                </TouchableOpacity>
+                            )}
+                            {loadingMoreReportsForList && (
+                                <View style={styles.loadingMoreContainer}>
+                                    <ActivityIndicator size="small" color={COLORS.primary} />
+                                    <Text style={styles.loadingMoreText}>Đang tải thêm...</Text>
+                                </View>
+                            )}
+                            {/* Hiển thị "Đã tải tất cả" khi không còn hóa đơn nào để tải thêm và ít nhất có 1 hóa đơn được hiển thị */}
+                            {!hasMoreReportsForList && (latestReportForList || olderReportsForList.length > 0) && (
+                                <Text style={styles.noMoreReportsText}>Đã tải tất cả hóa đơn.</Text>
+                            )}
+
+                        </View>
                     </>
                 )}
             </ScrollView>
@@ -638,16 +842,16 @@ const EmployeeStatisticsScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.lightGray },
-    header: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        paddingTop: Platform.OS === 'android' ? 40 : 50, 
-        paddingBottom: 15, 
-        paddingHorizontal: 10, 
-        backgroundColor: COLORS.white, 
-        borderBottomWidth: 1, 
-        borderBottomColor: '#e0e0e0' 
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: Platform.OS === 'android' ? 40 : 50,
+        paddingBottom: 15,
+        paddingHorizontal: 10,
+        backgroundColor: COLORS.white,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0'
     },
     backButton: { padding: 5, width: 40 },
     headerTitleContainer: { alignItems: 'center', flex: 1, marginHorizontal: 10 },
@@ -658,41 +862,50 @@ const styles = StyleSheet.create({
     timeFilterSegmentMargin: { marginHorizontal: 20, marginBottom: 15 },
     titleTouchable: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
     subHeaderTitle: { fontSize: 18, fontWeight: '600', color: COLORS.secondary },
-    datePickerBackdrop: { 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        backgroundColor: 'rgba(0,0,0,0.5)', 
-        padding: 20 
+    datePickerBackdrop: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        padding: 20
     },
-    datePickerContent: { 
-        backgroundColor: COLORS.white, 
-        borderRadius: 15, 
-        padding: 5, 
-        width: '100%', 
-        maxWidth: 350, 
-        shadowColor: "#000", 
-        shadowOffset: { width: 0, height: 2 }, 
-        shadowOpacity: 0.25, 
-        shadowRadius: 4, 
-        elevation: 5 
+    datePickerContent: {
+        backgroundColor: COLORS.white,
+        borderRadius: 15,
+        padding: 5,
+        width: '100%',
+        maxWidth: 350,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5
     },
     summaryCardWrapper: {
-        marginHorizontal: 20,
-        marginBottom: 10,
+        marginHorizontal: 8,
+        // marginBottom: 10,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        // width: '100%',
+    },
+    summaryCardWrapperItem: {
+        flex: 1,
+        width: '100%',
     },
     reportsListSection: {
         backgroundColor: COLORS.white,
         borderRadius: 12,
         marginHorizontal: 20,
         marginBottom: 20,
-        marginTop: 30,
+        marginTop: 30, // Có thể điều chỉnh margin
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 3,
         paddingTop: 15,
+        paddingBottom: 15, // Thêm padding dưới cho phần danh sách
     },
     reportsListTitle: {
         fontSize: 18,
@@ -783,13 +996,17 @@ const styles = StyleSheet.create({
         backgroundColor: '#f0f0f0',
         marginHorizontal: 0,
     },
-    emptyReportsContainer: {
+    emptyReportsContainer: { // Giữ nguyên cho báo cáo tổng thể
         padding: 20,
         alignItems: 'center',
         backgroundColor: COLORS.white,
         borderRadius: 12,
         marginHorizontal: 20,
         marginTop: 30,
+    },
+    emptyReportsContainerForList: { // Tên khác để phân biệt với emptyReportsContainer cũ
+        padding: 20,
+        alignItems: 'center',
     },
     emptyReportsText: {
         fontSize: 15,
@@ -803,7 +1020,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        height: 200, 
+        height: 200,
         marginTop: 50,
     },
     simpleLoadingText: {
@@ -821,12 +1038,69 @@ const styles = StyleSheet.create({
     },
     picker: {
         width: '100%',
-        height: 200, 
+        height: 200,
     },
     pickerItem: {
         fontSize: 16,
-        height: 200, 
+        height: 200,
         color: COLORS.black,
+    },
+    loadingReportsList: {
+        alignItems: 'center',
+        paddingVertical: 20,
+    },
+    loadingReportsText: {
+        marginTop: 10,
+        color: COLORS.secondary,
+    },
+    loadMoreButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        // backgroundColor: COLORS.lightGray,
+        borderRadius: 8,
+        marginHorizontal: 15,
+        marginTop: 10,
+        fontSize: 14,
+    },
+    loadMoreText: {
+        color: '#8b8b8b',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    loadingMoreContainer: {
+        alignItems: 'center',
+        paddingVertical: 10,
+        marginHorizontal: 15,
+    },
+    loadingMoreText: {
+        marginTop: 5,
+        color: COLORS.secondary,
+    },
+    noMoreReportsText: {
+        textAlign: 'center',
+        color: COLORS.secondary,
+        paddingVertical: 10,
+        marginHorizontal: 15,
+        fontSize: 14,
+    },
+    imageModalContainer: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    imageModalCloseButton: {
+        position: 'absolute',
+        top: 50,
+        right: 20,
+        zIndex: 1,
+    },
+    fullscreenImage: {
+        width: '100%',
+        height: '80%',
+        resizeMode: 'contain',
     },
 });
 
